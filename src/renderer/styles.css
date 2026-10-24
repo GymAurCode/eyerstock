@@ -1,0 +1,1216 @@
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/cairo/400.css";
+@import "@fontsource/cairo/600.css";
+@import "@fontsource/cairo/700.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * EyerStock design tokens - Minimal 3D Liquid Glass.
+ *
+ * One source of truth for colour. The semantic names (--bg, --surface, --text,
+ * --brand, ...) are what components and the Tailwind theme consume. The legacy
+ * names further down are kept as aliases of those, so nothing hardcodes a hex
+ * and a theme switch is a single class change on <html> with no component edits.
+ *
+ * The material is glass, and glass reads as glass because of *layers*, not
+ * because of colour. Every surface here is built the same way:
+ *
+ *   fill      a white slab (light) or a lighter teal slab (dark), translucent
+ *   sheen     a 1px inner highlight along the top edge - the light catching it
+ *   rim       a 1px hairline border in the *opposite* value to the fill, so a
+ *             white panel still has an outline on a white page
+ *   inner     a faint shading along the bottom edge, so the panel looks like a
+ *             solid object with thickness rather than a tinted rectangle
+ *   cast      a soft, low-opacity, multi-layer drop shadow with a wide, very
+ *             faint second layer that separates the panel from the page
+ *
+ * There are four elevation levels and nothing else: --elevation-1 for controls
+ * and chips, --elevation-2 for rows and wells, --elevation-3 for panels in the
+ * page, --elevation-4 for things that genuinely float (the rail, the top bar
+ * menus, dialogs). Every panel in the app picks one of the four, which is why
+ * a form on the products page and a card on the dashboard belong to the same
+ * object.
+ *
+ * Restraint is part of the system, not a per-screen decision:
+ *
+ *   - the page is one flat value: white in the light palette, black in the dark
+ *     one. The working column paints its own background on top, so the rail and
+ *     the content can be two distinct teals while the space around them stays
+ *     the page colour. Depth comes from shadow and highlight, never from hue;
+ *   - colour is functional. Teal is navigation and action, green is healthy,
+ *     amber is low, red is critical. A panel is never filled with one;
+ *   - blur is paid for only where something is genuinely behind the surface.
+ *     Panels in the page layout are translucent over a smooth field, so a
+ *     backdrop readback per card would cost a scroll frame per card and change
+ *     no pixels.
+ *
+ * Light and dark are both first-class and follow the same construction: the
+ * difference is the base value and the strength of each layer, never the number
+ * of layers. Every text pair clears WCAG AA (4.5:1 body, 3:1 large/UI) against
+ * its own surface once the translucency is composited over the page.
+ */
+@layer base {
+  :root {
+    color-scheme: light;
+
+    /* ---- page ---- */
+    /* The page is one flat value: pure white here, pure black in the dark
+       palette. The working surface is its own token because the rail floats in
+       the gutter around it, so "the page behind the glass" and "the main column"
+       are not always the same colour. */
+    --bg: #ffffff;
+    --main-bg: #ffffff;
+
+    /* ---- glass surfaces ---- */
+    /* Cards are white on a white page; the rim, the sheen and the cast shadow
+       are what separate them from it. Off-white is kept for wells and hovers. */
+    --surface: #ffffff;
+    --surface-2: rgba(31, 41, 55, 0.035);
+    --surface-3: rgba(31, 41, 55, 0.06);
+    --surface-float: #ffffff;
+    /* The header is the one surface that must stay genuinely see-through: it
+       sits over content that is still moving, and a bar that hides what passes
+       under it stops reading as glass. Lower alpha than --surface-float, with
+       the blur doing the work of hiding the noise. */
+    --surface-header: rgba(255, 255, 255, 0.82);
+    --glass-fill-header: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.92) 0%,
+      rgba(255, 255, 255, 0.72) 100%
+    );
+    --glass-fill: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 1) 0%,
+      rgba(255, 255, 255, 0.97) 46%,
+      rgba(249, 250, 251, 0.94) 100%
+    );
+    /* A raised panel catches light, so its rim is a soft neutral rather than a
+       cool hairline. The specular line along the top edge carries the glass. */
+    --glass-border: #e5e7eb;
+    --glass-edge-top: #ffffff;
+    --glass-edge-bottom: rgba(31, 41, 55, 0.05);
+    --glass-inner-glow: rgba(31, 41, 55, 0.04);
+    --glass-blur: 18px;
+    --glass-blur-strong: 26px;
+
+    /* ---- elevation: four levels, no more ---- */
+    --elevation-1: 0 1px 2px rgba(17, 24, 39, 0.05), 0 3px 8px -6px rgba(17, 24, 39, 0.12);
+    --elevation-2: 0 1px 1px rgba(17, 24, 39, 0.04), 0 7px 16px -12px rgba(17, 24, 39, 0.14);
+    --elevation-3:
+      0 1px 1px rgba(17, 24, 39, 0.04), 0 10px 24px -16px rgba(17, 24, 39, 0.16),
+      0 28px 52px -32px rgba(17, 24, 39, 0.2);
+    --elevation-4: 0 2px 6px -2px rgba(17, 24, 39, 0.1), 0 18px 40px -22px rgba(17, 24, 39, 0.2);
+    --shadow-glass: var(--elevation-3);
+    --shadow-glass-hover:
+      0 1px 1px rgba(17, 24, 39, 0.04), 0 14px 30px -16px rgba(17, 24, 39, 0.18),
+      0 36px 64px -34px rgba(17, 24, 39, 0.22);
+    --shadow-float: var(--elevation-4);
+
+    /* ---- lines ---- */
+    --border: #e5e7eb;
+    --border-strong: #d1d5db;
+
+    /* ---- text ---- */
+    --text: #1f2937;
+    --text-2: #4b5563;
+    --text-3: #6b7280;
+
+    /* ---- brand ---- */
+    --brand: #12706b;
+    --brand-hover: #0e5b57;
+    --brand-soft: rgba(18, 112, 107, 0.12);
+    --brand-contrast: #ffffff;
+    --brand-glow: rgba(18, 112, 107, 0.26);
+
+    /* ---- accents (small icon accents and chart series, never a panel fill) ---- */
+    --violet: #6d4bd6;
+    --violet-soft: rgba(109, 75, 214, 0.12);
+    --cyan: #0e7490;
+    --cyan-soft: rgba(14, 116, 144, 0.12);
+    --teal: #12706b;
+    --teal-soft: rgba(18, 112, 107, 0.12);
+
+    /* ---- navigation rail: a solid teal pane of glass, so it reads as a
+           distinct object against the white working surface ---- */
+    --sidebar-bg: #12706b;
+    --sidebar-text: #ffffff;
+    --sidebar-text-muted: rgba(255, 255, 255, 0.72);
+    --sidebar-active-bg: #1f8a82;
+    --sidebar-active-fg: #ffffff;
+    --sidebar-active-indicator: #ffffff;
+    --sidebar-border: rgba(255, 255, 255, 0.16);
+    --sidebar-hover: rgba(255, 255, 255, 0.1);
+    --sidebar-panel: rgba(255, 255, 255, 0.1);
+    --sidebar-edge-top: rgba(255, 255, 255, 0.28);
+    --sidebar-danger: #ffe0e4;
+    --sidebar-active-shadow: 0 8px 18px -12px rgba(9, 60, 56, 0.45);
+    /* The rail's own sheen. It has to be a translucent white over the teal, not
+       the near-opaque card fill, or the fill would hide the colour underneath. */
+    --sidebar-fill: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.12) 0%,
+      rgba(255, 255, 255, 0.04) 46%,
+      rgba(0, 0, 0, 0.03) 100%
+    );
+    --sidebar-shadow:
+      0 1px 1px rgba(9, 60, 56, 0.12), 0 12px 28px -16px rgba(9, 60, 56, 0.35),
+      0 34px 64px -38px rgba(9, 60, 56, 0.4);
+
+    /* ---- semantic ---- */
+    --success: #0f7a45;
+    --success-soft: rgba(15, 122, 69, 0.12);
+    --warning: #a2650a;
+    --warning-soft: rgba(199, 129, 18, 0.14);
+    --danger: #b0203a;
+    --danger-soft: rgba(207, 47, 69, 0.12);
+    --info: #0f6f68;
+    --info-soft: rgba(15, 111, 104, 0.12);
+
+    /*
+     * What sits *on* a saturated fill.
+     *
+     * The dark palette's semantic colours are light tints so they read on a
+     * dark panel, which means white text on top of them lands near 2.5:1. The
+     * foreground for a filled surface is therefore its own token, and it flips
+     * with the theme rather than assuming white.
+     */
+    --on-brand: #ffffff;
+    --on-danger: #ffffff;
+
+    /* ---- charts ---- */
+    --chart-1: #12706b;
+    --chart-2: #6d4bd6;
+    --chart-3: #0e7490;
+    --chart-4: #c27c05;
+    --chart-5: #0f7a45;
+    --chart-grid: rgba(31, 41, 55, 0.08);
+    --chart-area: rgba(18, 112, 107, 0.14);
+    --chart-area-warm: rgba(194, 124, 5, 0.14);
+    --chart-area-good: rgba(15, 122, 69, 0.12);
+    --chart-area-bad: rgba(207, 47, 69, 0.12);
+
+    /* ---- avatars, hashed by name ---- */
+    /* Each chip carries white initials, so every tint here is dark enough for
+       white to clear 4.5:1 on it. */
+    --avatar-1: #12706b;
+    --avatar-2: #6d4bd6;
+    --avatar-3: #0f7a45;
+    --avatar-4: #8f5c05;
+    --avatar-5: #c2263c;
+    --avatar-6: #0b7c72;
+    --avatar-fg: #ffffff;
+    /* Neutral chip for product thumbnails, which are placeholders for a photo
+       and must not compete with the row they sit in. */
+    --avatar-neutral-bg: #f3f4f6;
+    --avatar-neutral-fg: #6b7280;
+
+    /* ================================================================
+     * The sign-in panel.
+     *
+     * The login screen is a split, and this is the brand half of it. It is the
+     * deep half in both themes: it is Eyercall's own space rather than part of
+     * the working surface, so it deliberately does not flip with the app.
+     *
+     * That is also why its ink cannot be read from the app's text tokens -
+     * those move with the theme, and a panel that stayed deep teal while its
+     * text went dark would be unreadable. Its colours are declared here
+     * instead, once, and are the only palette in the app that does not follow
+     * the theme.
+     *
+     * The accent is the teal of the Eyercall mark, used sparingly: a line, an
+     * icon, a chip. The panel's depth comes from one deep base value, one soft
+     * light and one faint ruling - never from decoration.
+     * ================================================================ */
+    --auth-panel-bg: #0d3d3a;
+    --auth-panel-bg-2: #14564f;
+    --auth-panel-ink: #f2fbfa;
+    --auth-panel-ink-2: #c2ded9;
+    --auth-panel-ink-3: #93b8b2;
+    --auth-panel-line: rgba(255, 255, 255, 0.1);
+    --auth-panel-chip: rgba(255, 255, 255, 0.06);
+    --auth-panel-accent: #5fe0d3;
+    --auth-panel-accent-soft: rgba(95, 224, 211, 0.14);
+    --auth-panel-grid: rgba(255, 255, 255, 0.05);
+    --auth-panel-glow: rgba(45, 212, 191, 0.2);
+
+    /* ================================================================
+     * Legacy aliases.
+     *
+     * Components written before the rename still reference these. They are
+     * derived from the tokens above rather than being a second palette, so
+     * there is still exactly one place a colour is defined.
+     * ================================================================ */
+    --page: var(--bg);
+    --surface-raised: var(--surface);
+    --surface-sunken: var(--surface-2);
+    --surface-overlay: rgba(0, 0, 0, 0.42);
+    --divider: var(--border);
+    --text-primary: var(--text);
+    --text-secondary: var(--text-2);
+    --text-muted: var(--text-3);
+    --text-inverse: var(--brand-contrast);
+    --paper: #ffffff;
+
+    --brand-50: var(--brand-soft);
+    --brand-100: #d0ebe8;
+    --brand-200: #a6d9d4;
+    --brand-300: #78c5be;
+    --brand-400: #449f97;
+    --brand-500: #1f8a82;
+    --brand-600: var(--brand);
+    --brand-700: var(--brand-hover);
+    --brand-800: #0c5551;
+    --brand-900: #094440;
+    --brand-bright: #1f8a82;
+
+    --success-fg: var(--success);
+    --warning-fg: var(--warning);
+    --danger-fg: var(--danger);
+    --info-fg: var(--info);
+
+    --chart-primary: var(--chart-1);
+    --chart-secondary: var(--chart-2);
+    --chart-amber: var(--chart-4);
+    --chart-green: var(--success);
+
+    --shadow-sm: var(--elevation-1);
+    --shadow-md: var(--elevation-2);
+    --shadow-card: var(--shadow-glass);
+    --shadow-raised: var(--shadow-md);
+    --shadow-overlay: var(--shadow-float);
+    --shadow-focus: 0 0 0 3px rgba(18, 112, 107, 0.22);
+    --shadow-topbar: var(--shadow-float);
+    --shadow-button: 0 1px 2px rgba(17, 24, 39, 0.1);
+
+    --table-row-hover: #f9fafb;
+    --table-header-bg: #f9fafb;
+    --kbd-bg: var(--surface-2);
+    --input-bg: #ffffff;
+    --input-border: #e5e7eb;
+    --input-inset: rgba(17, 24, 39, 0.05);
+    --input-focus-ring: var(--brand);
+
+    /* ---- motion ---- */
+    --dur-fast: 140ms;
+    --dur-normal: 200ms;
+    --ease-glass: cubic-bezier(0.22, 0.61, 0.36, 1);
+    /* Opening runs a shade slower than closing, so a modal is readable the
+       instant it lands and still leaves promptly. Both ease out on the way in
+       and ease in on the way out, which is what makes a surface feel like it
+       is being handed to you and then taken back. */
+    --dur-dialog: 200ms;
+    --dur-dialog-close: 180ms;
+    --ease-dialog-out: cubic-bezier(0.4, 0, 1, 1);
+    /* The rail. One value, read by both the sidebar's own width and the page
+       margin beside it, so the two can never drift out of step. The easing is
+       a standard decelerate curve: fast at first so the rail answers the click
+       immediately, then settling rather than stopping dead. */
+    --dur-sidebar: 200ms;
+    --ease-sidebar: cubic-bezier(0.4, 0, 0.2, 1);
+    /* The old page colour is washed over the new theme and faded out. Short
+       enough to read as an answer to the click, long enough that the colour
+       change is not a flash. */
+    --dur-theme: 180ms;
+    /* How far a drawer starts from its own edge. Physical, not logical: the
+       element is already placed with start-0/end-0, so the offset has to be
+       signed against the reading direction to land off the correct side. */
+    --drawer-from-end: 100%;
+    --drawer-from-start: -100%;
+
+    /* ---- metrics ---- */
+    --radius-panel: 20px;
+    --radius-sidebar: 28px;
+    --radius-control: 12px;
+    /* The floating header: one pill of glass, sticky at the top of the page. */
+    --radius-header: 22px;
+    --header-height: 60px;
+    --sidebar-panel-width: 252px;
+    --sidebar-gutter: 16px;
+    /* The rail reserves its own width plus the gutter on each side, so the page
+       content aligns with the floating panel rather than with the window. */
+    --sidebar-width: calc(var(--sidebar-panel-width) + var(--sidebar-gutter) * 2);
+    --sidebar-panel-width-collapsed: 60px;
+    --sidebar-width-collapsed: calc(
+      var(--sidebar-panel-width-collapsed) + var(--sidebar-gutter) * 2
+    );
+    --bottomnav-height: 68px;
+  }
+
+  /* The app is English-only today, but the rest of this file already carries
+     `:lang(ar)` and `[dir=rtl]` rules for Cairo. Mirroring the two drawer
+     offsets here keeps that promise honest: a right drawer in RTL starts from
+     the left, not from the right. */
+  :root[dir="rtl"] {
+    --drawer-from-end: -100%;
+    --drawer-from-start: 100%;
+  }
+
+  .dark {
+    color-scheme: dark;
+
+    /* ---- page ---- */
+    /* Pure black outside the layout. The rail and the working panel are two
+       separately-toned teal surfaces floating on it, with black showing in every
+       gutter between them and the window edge. */
+    --bg: #000000;
+    --main-bg: #082522;
+
+    /* ---- glass surfaces ---- */
+    /* Cards sit one step lighter than the working panel, so they read as objects
+       resting on it rather than as patches of it. */
+    --surface: #0d2e2a;
+    --surface-2: rgba(255, 255, 255, 0.05);
+    --surface-3: rgba(255, 255, 255, 0.032);
+    /* Floating surfaces get their own, denser fill. A menu that blurs the page
+       needs a base colour to mix it down with, or the raw field behind it comes
+       through at full strength. */
+    --surface-float: #0d2e2a;
+    /* Translucent, for the same reason as the light theme's: a dense fill over
+       a moving page reads as a slab, not as glass. The blur mixes the content
+       behind it down; the fill only gives the blur something to sit on. */
+    --surface-header: rgba(13, 46, 42, 0.62);
+    /* The dark palette is flat: no gradient sheen on any surface. */
+    --glass-fill-header: none;
+    --glass-fill: none;
+    --glass-border: #1c423c;
+    --glass-edge-top: rgba(255, 255, 255, 0.12);
+    --glass-edge-bottom: rgba(0, 0, 0, 0.34);
+    --glass-inner-glow: transparent;
+
+    /* ---- elevation ---- */
+    /* Dark leans on the rim and the cast shadow, not on darkness. The four
+       levels are the same four as the light palette, re-expressed. */
+    --elevation-1: 0 1px 2px rgba(0, 0, 0, 0.45);
+    --elevation-2: 0 1px 1px rgba(0, 0, 0, 0.35), 0 8px 18px -12px rgba(0, 0, 0, 0.7);
+    --elevation-3:
+      0 1px 1px rgba(0, 0, 0, 0.35), 0 12px 26px -16px rgba(0, 0, 0, 0.75),
+      0 32px 56px -32px rgba(0, 0, 0, 0.8);
+    --elevation-4: 0 2px 6px -2px rgba(0, 0, 0, 0.5), 0 20px 44px -22px rgba(0, 0, 0, 0.8);
+    --shadow-glass: var(--elevation-3);
+    --shadow-glass-hover:
+      0 1px 1px rgba(0, 0, 0, 0.35), 0 16px 32px -16px rgba(0, 0, 0, 0.8),
+      0 40px 68px -34px rgba(0, 0, 0, 0.85);
+    --shadow-float: var(--elevation-4);
+
+    /* ---- lines ---- */
+    --border: #1c423c;
+    --border-strong: #2f5c55;
+
+    /* ---- text ---- */
+    --text: #ffffff;
+    --text-2: #c5dad6;
+    --text-3: #9dbab5;
+
+    /* ---- brand ---- */
+    /* A muted sea-glass accent: light enough to read on the panels, but without
+       the mint brightness of a neon highlight. */
+    --brand: #74bdb2;
+    --brand-hover: #8fd0c6;
+    --brand-soft: rgba(116, 189, 178, 0.13);
+    --brand-contrast: #041f1d;
+    --brand-glow: rgba(116, 189, 178, 0.2);
+
+    /* ---- accents ---- */
+    --violet: #b7a6e8;
+    --violet-soft: rgba(183, 166, 232, 0.14);
+    --cyan: #86c7db;
+    --cyan-soft: rgba(134, 199, 219, 0.12);
+    --teal: #74bdb2;
+    --teal-soft: rgba(116, 189, 178, 0.13);
+
+    /* ---- navigation rail ---- */
+    --sidebar-bg: #041c1a;
+    --sidebar-text: #f5f7f7;
+    --sidebar-text-muted: #a3c0bc;
+    --sidebar-active-bg: #0b322d;
+    --sidebar-active-fg: #ffffff;
+    --sidebar-active-indicator: #ffffff;
+    --sidebar-border: rgba(255, 255, 255, 0.07);
+    --sidebar-hover: rgba(255, 255, 255, 0.045);
+    --sidebar-panel: rgba(255, 255, 255, 0.03);
+    --sidebar-edge-top: rgba(255, 255, 255, 0.11);
+    --sidebar-danger: #ffb3be;
+    --sidebar-active-shadow: 0 8px 18px -12px rgba(0, 0, 0, 0.55);
+    --sidebar-fill: none;
+    --sidebar-shadow:
+      0 1px 1px rgba(0, 0, 0, 0.45), 0 14px 32px -18px rgba(0, 0, 0, 0.8),
+      0 36px 68px -38px rgba(0, 0, 0, 0.9);
+
+    /* ---- semantic ---- */
+    --success: #7fd3a0;
+    --success-soft: rgba(127, 211, 160, 0.14);
+    --warning: #e3be72;
+    --warning-soft: rgba(227, 190, 114, 0.14);
+    --danger: #f29aa4;
+    --danger-soft: rgba(242, 154, 164, 0.15);
+    --info: #74bdb2;
+    --info-soft: rgba(116, 189, 178, 0.13);
+    --on-brand: #041f1d;
+    --on-danger: #3a0a11;
+
+    /* ---- charts ---- */
+    --chart-1: #74bdb2;
+    --chart-2: #b7a6e8;
+    --chart-3: #86c7db;
+    --chart-4: #e3be72;
+    --chart-5: #7fd3a0;
+    --chart-grid: rgba(255, 255, 255, 0.08);
+    --chart-area: rgba(116, 189, 178, 0.15);
+    --chart-area-warm: rgba(227, 190, 114, 0.14);
+    --chart-area-good: rgba(127, 211, 160, 0.14);
+    --chart-area-bad: rgba(242, 154, 164, 0.14);
+
+    /* ---- avatars ---- */
+    /* The dark palette is the bright one, which is why its initials are dark:
+       white on a chip this light would sit near 2.5:1. */
+    --avatar-1: #74bdb2;
+    --avatar-2: #b7a6e8;
+    --avatar-3: #7fd3a0;
+    --avatar-4: #e3be72;
+    --avatar-5: #f29aa4;
+    --avatar-6: #86c7db;
+    --avatar-fg: #041f1d;
+    --avatar-neutral-bg: rgba(255, 255, 255, 0.09);
+    --avatar-neutral-fg: #c5dad6;
+
+    /* ---- legacy aliases ---- */
+    --surface-overlay: rgba(0, 0, 0, 0.7);
+    --brand-50: var(--brand-soft);
+    --brand-100: #041a18;
+    --brand-200: #05211e;
+    --brand-300: #072824;
+    --brand-400: #092f2a;
+    --brand-500: #0b322d;
+    --brand-600: var(--brand);
+    --brand-700: var(--brand-hover);
+    --brand-800: #a6ddd4;
+    --brand-900: #c9ede7;
+
+    --shadow-overlay: var(--shadow-float);
+    --shadow-focus: 0 0 0 3px rgba(116, 189, 178, 0.28);
+    --shadow-button: 0 1px 2px rgba(0, 0, 0, 0.4);
+
+    --table-row-hover: rgba(255, 255, 255, 0.05);
+    --table-header-bg: rgba(255, 255, 255, 0.03);
+    --input-bg: rgba(255, 255, 255, 0.05);
+    --input-border: #1c423c;
+    --input-inset: rgba(0, 0, 0, 0.25);
+  }
+
+  * {
+    border-color: var(--border);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    color: var(--text);
+    font-family:
+      Inter,
+      Cairo,
+      system-ui,
+      -apple-system,
+      sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+
+    /*
+     * The room the glass sits in.
+     *
+     * One flat value, painted on the body: white behind the light layout and
+     * pure black behind the dark one. The depth in this app comes from the
+     * glass itself - rim, sheen and cast shadow - so the page stays a single
+     * clean field and every card keeps its edge against it. The main column
+     * paints its own token on top; only the gutters around the floating rail
+     * show this colour once the app shell has rendered.
+     */
+    background-color: var(--bg);
+  }
+
+  :lang(ar),
+  [dir="rtl"] body {
+    font-family: Cairo, Inter, system-ui, sans-serif;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--brand-soft);
+    color: var(--text);
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 999px;
+    /* 8px track minus a 3px transparent border on each side leaves a 2px
+       visible thumb, while the full 8px stays grabbable. */
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--text-3);
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /*
+   * The one animation that exists in this file is a control lifting on hover.
+   * Transform only, so the compositor moves it without asking layout for a new
+   * frame.
+   *
+   * Delays go with the durations: an entrance that waits 80ms before it starts
+   * is still an entrance, and cancelling only the duration would leave the
+   * delay behind.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-delay: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      transition-delay: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* -----------------------------------------------------------------------
+   * The application frame.
+   *
+   * The rail and the working panel are siblings in one flex row, and this frame
+   * is exactly one viewport tall. The rail is fixed and inset by the sidebar
+   * gutter; the panel is the flex child, inset by the same gutter on its top,
+   * end and bottom edges. Both therefore start and finish on the same lines
+   * however little content a page has, and the page colour stays visible in
+   * every gap around them. `100dvh` tracks a resized desktop window; the
+   * `100vh` line above it is the fallback for engines without the unit.
+   * --------------------------------------------------------------------- */
+  .app-shell {
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  /* The working panel: a floating slab of the same material as the rail. The
+     component supplies the start margin on wide screens (it follows the rail
+     width), and this base margin covers the narrow layout, where the rail is a
+     drawer and the panel floats on all four sides. */
+  .app-main {
+    margin-block: var(--sidebar-gutter);
+    margin-inline-end: var(--sidebar-gutter);
+    margin-inline-start: var(--sidebar-gutter);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sidebar);
+    background-color: var(--main-bg);
+    box-shadow:
+      inset 0 1px 0 var(--glass-edge-top),
+      var(--shadow-glass);
+  }
+
+  /* -----------------------------------------------------------------------
+   * The dashboard seam.
+   *
+   * The dashboard's wide column and its narrow column are two different
+   * sections, not two halves of one card grid, so at the width where they sit
+   * side by side a hairline marks the boundary. It is drawn in the gap rather
+   * than as a border on the column: the narrow column is shorter than the wide
+   * one, and a border would stop at its last card while the seam it describes
+   * continues beside the column on the left.
+   *
+   * The fade at both ends keeps it from reading as the edge of a panel. The
+   * offset is half of the grid's 20px gap, so the line stays centred between
+   * the cards on either side of it.
+   * --------------------------------------------------------------------- */
+  .dashboard-split {
+    position: relative;
+  }
+
+  @media (min-width: 1280px) {
+    .dashboard-split::before {
+      content: "";
+      position: absolute;
+      inset-block: 0;
+      inset-inline-start: -10px;
+      width: 1px;
+      pointer-events: none;
+      background-image: linear-gradient(
+        to bottom,
+        transparent 0,
+        var(--border-strong) 14px,
+        var(--border-strong) calc(100% - 14px),
+        transparent 100%
+      );
+    }
+  }
+
+  /* -----------------------------------------------------------------------
+   * A recessed glass well.
+   *
+   * The same material as everything else, pushed *back* rather than raised: a
+   * lighter fill, an inner shadow along the top and a cool hairline. A raised
+   * panel earns a luminous rim because it catches light; a well needs an edge
+   * that reads as a recess, which is why it borrows the input tokens rather
+   * than the glass ones.
+   * --------------------------------------------------------------------- */
+  .glass-input {
+    background-color: var(--input-bg);
+    border: 1px solid var(--input-border);
+    box-shadow:
+      inset 0 1px 3px var(--input-inset),
+      inset 0 1px 0 var(--glass-edge-top);
+    transition:
+      border-color var(--dur-fast) ease-out,
+      box-shadow var(--dur-fast) ease-out;
+  }
+  .glass-input:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--brand) 45%, var(--input-border));
+  }
+  .glass-input:focus,
+  .glass-input:focus-within {
+    border-color: var(--brand);
+    box-shadow:
+      inset 0 1px 3px var(--input-inset),
+      0 0 0 3px var(--shadow-focus);
+  }
+
+  /* A field that failed validation keeps its own colour, ring included, so the
+     focus state never contradicts the error state. */
+  .glass-input[aria-invalid="true"]:focus,
+  .glass-input[aria-invalid="true"]:focus-within {
+    border-color: var(--danger);
+    box-shadow:
+      inset 0 1px 3px var(--input-inset),
+      0 0 0 3px color-mix(in srgb, var(--danger) 26%, transparent);
+  }
+
+  /* -----------------------------------------------------------------------
+   * The sign-in panel.
+   *
+   * A deep navy field with one soft light in the corner. The depth is
+   * structural - a base value, a diagonal lift and a single glow - so the
+   * panel reads as a lit surface rather than as a block of colour.
+   * --------------------------------------------------------------------- */
+  .auth-panel {
+    background-color: var(--auth-panel-bg);
+    background-image:
+      radial-gradient(38rem 26rem at 6% -12%, var(--auth-panel-glow), transparent 62%),
+      linear-gradient(158deg, var(--auth-panel-bg-2) 0%, var(--auth-panel-bg) 58%);
+  }
+
+  /* Dark mode uses the flat brand colour here too. */
+  .dark .auth-panel {
+    background-image: none;
+  }
+
+  /**
+   * The ruling.
+   *
+   * A ledger's grid: one pixel, almost invisible, fading out towards the
+   * bottom so it never competes with the copy. It is a mask over a repeating
+   * gradient rather than a background image so the fade costs nothing.
+   */
+  .auth-panel-grid {
+    background-image:
+      linear-gradient(to right, var(--auth-panel-grid) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--auth-panel-grid) 1px, transparent 1px);
+    background-size: 64px 64px;
+    -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0) 76%);
+    mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0) 76%);
+  }
+
+  /* -----------------------------------------------------------------------
+   * The surface primitive.
+   *
+   * Five layers, all of them cheap: a near-white fill that lets the page
+   * through, a 1px specular line along the top edge, a hairline rim in the
+   * opposite value, a faint shading inside the bottom edge that gives the
+   * panel thickness, and a two-part drop shadow - a tight one for contact and a
+   * wide, very faint one for separation.
+   * --------------------------------------------------------------------- */
+  .glass,
+  .glass-float {
+    position: relative;
+    background-color: var(--surface);
+    background-image: var(--glass-fill);
+    border: 1px solid var(--glass-border);
+    box-shadow:
+      inset 0 1px 0 var(--glass-edge-top),
+      inset 0 -1px 0 var(--glass-edge-bottom),
+      inset 0 -16px 26px -22px var(--glass-inner-glow),
+      var(--shadow-glass);
+  }
+
+  /**
+   * The application header: one floating pane of glass that holds the search
+   * field, the account controls and the profile.
+   *
+   * It is `position: sticky` inside the page's scroll container, so what passes
+   * under it is the content itself - tables, cards, rows - and the blur is
+   * picking up real pixels that are moving, which is the whole point. A sticky
+   * element only sticks within its nearest *scroll container*, so the header
+   * has to live inside <main>, not beside it.
+   *
+   * `backdrop-filter` is set on this element only: the controls inside it are
+   * ordinary buttons over one shared surface, never glass panes of their own.
+   */
+  .glass-header {
+    position: relative;
+    background-color: var(--surface-header);
+    background-image: var(--glass-fill-header);
+    border: 1px solid var(--glass-border);
+    box-shadow:
+      inset 0 1px 0 var(--glass-edge-top),
+      inset 0 -1px 0 var(--glass-edge-bottom),
+      var(--shadow-float);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    backdrop-filter: blur(20px) saturate(160%);
+  }
+
+  /**
+   * Glass that genuinely floats over content - menus, dialogs, the mobile dock,
+   * the alerts popover. These are few and short-lived, and they are the only
+   * surfaces where there is something behind them worth blurring.
+   */
+  .glass-float {
+    background-color: var(--surface-float);
+    box-shadow:
+      inset 0 1px 0 var(--glass-edge-top),
+      inset 0 -1px 0 var(--glass-edge-bottom),
+      inset 0 -16px 26px -22px var(--glass-inner-glow),
+      var(--shadow-float);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+    backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  }
+
+  .glass-float-strong {
+    background-color: var(--surface-float);
+    box-shadow:
+      inset 0 1px 0 var(--glass-edge-top),
+      inset 0 -1px 0 var(--glass-edge-bottom),
+      inset 0 -16px 26px -22px var(--glass-inner-glow),
+      var(--shadow-float);
+    -webkit-backdrop-filter: blur(var(--glass-blur-strong)) saturate(180%);
+    backdrop-filter: blur(var(--glass-blur-strong)) saturate(180%);
+  }
+
+  /**
+   * The navigation rail: a floating, rounded pane of the same glass, set in
+   * from the window edge by the gutter so the page shows past it on every side.
+   *
+   * Its fill is opaque, so there is nothing for a backdrop blur to mix down.
+   * It used to carry one anyway; that made every frame of the width animation
+   * pay for a readback that could not change a single pixel.
+   */
+  .glass-sidebar {
+    position: relative;
+    /* The rail's width animates, so its own layout should not be allowed to
+       make the rest of the page's layout depend on what is inside it. */
+    contain: layout style;
+    background-color: var(--sidebar-bg);
+    background-image: var(--sidebar-fill);
+    border: 1px solid var(--sidebar-border);
+    box-shadow:
+      inset 0 1px 0 var(--sidebar-edge-top),
+      inset 0 -1px 0 var(--glass-edge-bottom),
+      inset 0 -18px 30px -24px var(--glass-inner-glow),
+      var(--sidebar-shadow);
+  }
+
+  /**
+   * `.card` is the one panel primitive: `.glass` plus a clip, so a table or a
+   * chart inside it cannot paint over the rounded corners.
+   */
+  .card {
+    border-radius: var(--radius-panel);
+    overflow: hidden;
+  }
+
+  .card-interactive {
+    transition:
+      transform var(--dur-normal) var(--ease-glass),
+      box-shadow var(--dur-normal) var(--ease-glass),
+      border-color var(--dur-fast) ease-out;
+  }
+  .card-interactive:hover {
+    transform: translateY(-2px);
+    border-color: var(--border-strong);
+    box-shadow:
+      inset 0 1px 0 var(--glass-edge-top),
+      inset 0 -1px 0 var(--glass-edge-bottom),
+      inset 0 -16px 26px -22px var(--glass-inner-glow),
+      var(--shadow-glass-hover);
+  }
+  .card-interactive:active {
+    transform: translateY(0) scale(0.994);
+    transition-duration: var(--dur-fast);
+  }
+
+  /* A control that lifts: press feedback on every button, quick action and
+     row tile, without each of them re-declaring a transition. */
+  .pressable {
+    transition:
+      transform var(--dur-fast) var(--ease-glass),
+      background-color var(--dur-fast) ease-out,
+      border-color var(--dur-fast) ease-out,
+      box-shadow var(--dur-fast) ease-out;
+  }
+  .pressable:active:not(:disabled) {
+    transform: scale(0.975);
+  }
+
+  /** A glass panel that carries a light of its own. Used sparingly: an accent
+      that has to be visible without being a coloured fill. */
+  .glass-lit {
+    box-shadow:
+      inset 0 1px 0 var(--glass-edge-top),
+      inset 0 -1px 0 var(--glass-edge-bottom),
+      inset 0 -16px 26px -22px var(--lit-glow, var(--glass-inner-glow)),
+      var(--lit-shadow, var(--shadow-glass));
+  }
+
+  /* The icon chip: a small piece of the same glass, with its own light. */
+  .glass-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 14px;
+    background-color: var(--surface-2);
+    background-image: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.2) 0%,
+      rgba(255, 255, 255, 0.02) 60%
+    );
+    border: 1px solid var(--glass-border);
+    box-shadow:
+      inset 0 1px 0 var(--glass-edge-top),
+      0 6px 14px -10px var(--chip-glow, rgba(0, 0, 0, 0.35));
+  }
+
+  /* The dark palette is flat: chips and brand-filled controls use their solid
+     background colour instead of the light theme's gradient. */
+  .dark .glass-chip {
+    background-image: none;
+  }
+
+  .dark button[data-variant="primary"] {
+    background-color: var(--brand);
+    background-image: none;
+  }
+  .dark button[data-variant="primary"]:hover {
+    background-color: var(--brand-hover);
+  }
+  .dark button[data-variant="primary"]:active {
+    background-color: color-mix(in srgb, var(--brand-hover) 86%, black);
+  }
+  .dark button[data-variant="destructive"] {
+    background-color: var(--danger);
+    background-image: none;
+  }
+  .dark button[role="switch"][data-switch-state="on"] {
+    background-color: var(--brand);
+    background-image: none;
+  }
+
+  /*
+   * The light each chip is lit with.
+   *
+   * `color-mix` against the token rather than a literal, so the chip follows the
+   * theme: in the light palette these are deep enough to read as a shadow under
+   * the glass, in the dark palette they brighten with the rest of the palette.
+   * Listed as literal class names because Tailwind only emits rules it can see
+   * written down.
+   */
+  .chip-brand {
+    --chip-glow: color-mix(in srgb, var(--brand) 30%, transparent);
+  }
+  .chip-violet {
+    --chip-glow: color-mix(in srgb, var(--violet) 28%, transparent);
+  }
+  .chip-cyan {
+    --chip-glow: color-mix(in srgb, var(--cyan) 26%, transparent);
+  }
+  .chip-teal {
+    --chip-glow: color-mix(in srgb, var(--teal) 26%, transparent);
+  }
+  .chip-amber {
+    --chip-glow: color-mix(in srgb, var(--warning) 26%, transparent);
+  }
+  .chip-rose {
+    --chip-glow: color-mix(in srgb, var(--danger) 26%, transparent);
+  }
+  .chip-neutral {
+    --chip-glow: color-mix(in srgb, var(--text-3) 40%, transparent);
+  }
+
+  /** Shimmer for skeletons. One moving highlight, transform only. */
+  .shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  .shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background-image: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.14) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    animation: shimmer-sweep 1.6s ease-in-out infinite;
+  }
+  @keyframes shimmer-sweep {
+    to {
+      transform: translateX(100%);
+    }
+  }
+
+  /**
+   * Dialog body: 480px and 920px dialogs run tighter than page cards so a whole
+   * small form is visible without scrolling.
+   */
+  .dialog-body .grid.gap-3 {
+    gap: 12px;
+  }
+
+  .dialog-body .h-9 {
+    height: 36px;
+  }
+
+  .kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    background: var(--kbd-bg);
+    color: var(--text-2);
+    font-size: 10px;
+    font-weight: 500;
+  }
+
+  /*
+   * Toasts.
+   *
+   * Sonner ships its own palette and writes it onto the toaster element as
+   * custom properties, which is why a toast could sit on a dark page in a
+   * colour that was chosen for a light one. Every one of them is redirected to
+   * a token here, so a toast is themed by the same variables as everything else
+   * and flips with the page.
+   */
+  [data-sonner-toaster] {
+    --normal-bg: var(--surface-float);
+    --normal-text: var(--text);
+    --normal-border: var(--glass-border);
+    --success-bg: var(--success-soft);
+    --success-text: var(--success);
+    --success-border: color-mix(in srgb, var(--success) 34%, transparent);
+    --error-bg: var(--danger-soft);
+    --error-text: var(--danger);
+    --error-border: color-mix(in srgb, var(--danger) 34%, transparent);
+    --warning-bg: var(--warning-soft);
+    --warning-text: var(--warning);
+    --warning-border: color-mix(in srgb, var(--warning) 34%, transparent);
+    --info-bg: var(--info-soft);
+    --info-text: var(--info);
+    --info-border: color-mix(in srgb, var(--info) 32%, transparent);
+  }
+
+  [data-sonner-toast] {
+    border-radius: var(--radius-panel);
+    box-shadow: var(--shadow-float);
+    font-family: Inter, Cairo, system-ui, sans-serif;
+  }
+
+  .print-sheet {
+    background: #ffffff;
+    color: #0f172a;
+  }
+
+  .print-band {
+    background: #14243d !important;
+    color: #ffffff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-rule {
+    border-top: 3px solid #14243d;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-total-box {
+    border: 1px solid #14243d;
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: #f5f8fc;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  @media print {
+    @page {
+      size: A4;
+      margin: 12mm;
+    }
+
+    body {
+      /* Paper, not glass: the page depth and the translucency would print as a
+         grey wash and waste toner. */
+      background: #ffffff !important;
+      background-image: none !important;
+      color: #0f172a !important;
+    }
+
+    /*
+     * The application's own print output.
+     *
+     * Documents are printed through a separate window that holds nothing but
+     * the document, so this only matters if someone prints the application
+     * window itself: the rail, the toolbar and the floating dock are chrome,
+     * not content, and leaving them in produces a page of furniture.
+     */
+    .app-sidebar,
+    .app-topbar,
+    .no-print {
+      display: none !important;
+    }
+
+    .app-shell main {
+      margin: 0 !important;
+      border: 0 !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      overflow: visible !important;
+    }
+
+    /* Paper is not a viewport: the app's frame must grow with the content
+       instead of clipping it at one screen height. */
+    .app-shell {
+      height: auto !important;
+    }
+
+    .glass,
+    .glass-float,
+    .glass-sidebar,
+    .glass-header,
+    .card,
+    .glass-chip {
+      box-shadow: none !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+
+    .print-only {
+      display: block !important;
+    }
+
+    .print-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+
+    .print-table th {
+      background: #f1f5f9;
+      border-bottom: 2px solid #14243d;
+      padding: 6px;
+      text-align: left;
+      font-weight: 700;
+    }
+
+    .print-table td {
+      border-bottom: 1px solid #cbd5e1;
+      padding: 5px 6px;
+      vertical-align: top;
+    }
+
+    .print-table tr:nth-child(even) td {
+      background: #f8fafc;
+    }
+
+    .print-table td.num,
+    .print-table th.num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .print-break {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+  }
+
+  .print-only {
+    display: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * Theme switch
+ *
+ * The old page colour is laid over the window at low opacity and faded out.
+ * Opacity is compositor work, so the fade does not re-lay-out the page or
+ * snapshot it. The theme class itself has already changed underneath.
+ * ------------------------------------------------------------------------ */
+.theme-wash {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  pointer-events: none;
+  background: var(--theme-wash-color, transparent);
+  opacity: 0;
+  animation: theme-wash var(--dur-theme) var(--ease-glass) forwards;
+}
+
+@keyframes theme-wash {
+  from {
+    opacity: 0.18;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-wash {
+    display: none;
+  }
+}
