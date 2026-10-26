@@ -4,7 +4,7 @@
  * Compact: 36px pagination, smaller menu items.
  */
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
@@ -424,7 +424,17 @@ function pageWindow(page: number, pages: number): readonly (number | null)[] {
 
 /**
  * Sorting, paging and column-visibility state for a table.
+ *
+ * `focusKey` is the best search match. When it changes, the table moves to the
+ * page that contains it; a manual page change afterwards is left alone. The
+ * page is also clamped when a filter shrinks the list, so the reader is never
+ * left on page 7 of a two-page result.
  */
+export interface TableViewOptions<T> {
+  readonly focusKey?: string | number | null | undefined;
+  readonly rowKey?: ((row: T) => string | number) | undefined;
+}
+
 export function useTableView<T extends object>(
   rows: readonly T[],
   columns: readonly {
@@ -432,6 +442,7 @@ export function useTableView<T extends object>(
     readonly sortValue?: (row: T) => string | number | null | undefined;
   }[],
   initialPerPage = 25,
+  options: TableViewOptions<T> = {},
 ): {
   readonly rowsOnPage: T[];
   readonly totalRows: number;
@@ -451,6 +462,9 @@ export function useTableView<T extends object>(
   const [sortId, setSortId] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [hiddenColumnIds, setHiddenColumnIds] = useState<readonly string[]>([]);
+
+  const focusKey = options.focusKey ?? null;
+  const focusRowKey = options.rowKey;
 
   // Pages rebuild their column definitions on every render, so `columns` has a
   // new identity each time even when every sortValue is the same function in
@@ -511,6 +525,32 @@ export function useTableView<T extends object>(
   }, [rows, sortDirection, sortId]);
 
   const rowsOnPage = useMemo(() => pageSlice(sorted, page, perPage), [page, perPage, sorted]);
+
+  // The page can be left behind by a filter that made the list shorter. The
+  // slice already clamps what it displays; clamping the state too keeps the
+  // pagination controls and the table agreeing with each other.
+  const pages = pageCount(sorted.length, perPage);
+  useEffect(() => {
+    setPage((current) => Math.min(Math.max(1, current), pages));
+  }, [pages]);
+
+  // Jump to the best match's page once per focus key. The data may arrive a
+  // render after the key, in which case the effect simply runs again. Paging
+  // after that is the reader's: the key has been handled and is not re-applied.
+  const handledFocusRef = useRef<string | number | null>(null);
+  useEffect(() => {
+    if (focusKey === null) {
+      handledFocusRef.current = null;
+      return;
+    }
+    if (focusRowKey === undefined || handledFocusRef.current === focusKey) return;
+
+    const index = sorted.findIndex((row) => focusRowKey(row) === focusKey);
+    if (index < 0) return;
+
+    handledFocusRef.current = focusKey;
+    setPage(Math.floor(index / perPage) + 1);
+  }, [focusKey, focusRowKey, sorted, perPage]);
 
   return {
     rowsOnPage,

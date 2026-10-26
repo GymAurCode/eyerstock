@@ -37,11 +37,13 @@ import {
   type PrintableDocument,
 } from "../../components/print/DocumentPrintDialog";
 import { type Column, DataTable } from "../../components/ui/DataTable";
+import { HighlightText } from "../../components/ui/HighlightText";
 import { RecordActions, type RecordAction } from "../../components/ui/RecordActions";
 import { Badge } from "../../components/ui/Badge";
 import { EmptyState, PageHeader, TableSkeleton } from "../../components/ui/Feedback";
 import { Field, Input, MoneyInput, Select, Textarea } from "../../components/ui/Input";
 import { usePartyOptions } from "../../lib/hooks";
+import { useSearchHighlight } from "../../lib/search-highlight";
 import { FinanceLayout } from "./FinanceLayout";
 
 const METHOD_OPTIONS: readonly { value: string; label: string }[] = [
@@ -91,6 +93,29 @@ const POSTING_KINDS: readonly {
   },
 ];
 
+const paymentKey = (row: PaymentDto): number => row.id;
+
+/**
+ * `payments.list` has no search parameter, so the loaded rows are filtered
+ * here. These are every field a reader can see or would reasonably type: the
+ * reference, the receipt number, who it was with, what it settled, the notes,
+ * and the amount as it is displayed.
+ */
+const PAYMENT_SEARCH_FIELDS = [
+  (row: PaymentDto) => row.reference,
+  (row: PaymentDto) => row.receiptNumber,
+  (row: PaymentDto) => row.partyName,
+  (row: PaymentDto) => row.notes,
+  (row: PaymentDto) => formatAmount(row.amountFils),
+  (row: PaymentDto) => row.allocations.map((allocation) => allocation.documentNumber).join(" "),
+];
+
+const PAYMENT_RANK_FIELDS = [
+  (row: PaymentDto) => row.reference,
+  (row: PaymentDto) => row.receiptNumber,
+  (row: PaymentDto) => row.partyName,
+];
+
 export function FinancePaymentsPage(): React.JSX.Element {
   const { can, settings } = useApp();
   const client = useQueryClient();
@@ -104,7 +129,7 @@ export function FinancePaymentsPage(): React.JSX.Element {
   const [printing, setPrinting] = useState<PrintableDocument | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["payments", { direction, search, fromDate, toDate }],
+    queryKey: ["payments", { direction, fromDate, toDate }],
     queryFn: () =>
       call("payments.list", {
         direction,
@@ -115,7 +140,26 @@ export function FinancePaymentsPage(): React.JSX.Element {
   });
 
   const rows = useMemo(() => data ?? [], [data]);
-  const total = useMemo(() => rows.reduce((sum, row) => sum + row.amountFils, 0), [rows]);
+
+  const highlight = useSearchHighlight(rows, search, {
+    rowKey: paymentKey,
+    fields: PAYMENT_SEARCH_FIELDS,
+    rankFields: PAYMENT_RANK_FIELDS,
+  });
+
+  // The matched keys are already computed, so filtering reuses that pass
+  // instead of walking every field a second time.
+  const visible = useMemo(
+    () => (highlight.active ? rows.filter((row) => highlight.keys.has(paymentKey(row))) : rows),
+    [rows, highlight],
+  );
+
+  const total = useMemo(
+    () => visible.reduce((sum, row) => sum + row.amountFils, 0),
+    [visible],
+  );
+
+  const isSearching = search.trim().length > 0;
 
   const columns: readonly Column<PaymentDto>[] = [
     {
@@ -131,7 +175,7 @@ export function FinancePaymentsPage(): React.JSX.Element {
       widthClass: "w-36",
       cell: (row) => (
         <span className="tabular text-[var(--text-2)]">
-          {row.reference ?? row.receiptNumber ?? "—"}
+          <HighlightText text={row.reference ?? row.receiptNumber ?? "—"} term={search} />
         </span>
       ),
       sortValue: (row) => row.reference ?? "",
@@ -139,7 +183,11 @@ export function FinancePaymentsPage(): React.JSX.Element {
     {
       id: "party",
       header: direction === "inbound" ? "From" : "To",
-      cell: (row) => <span className="text-[var(--text)]">{row.partyName}</span>,
+      cell: (row) => (
+        <span className="text-[var(--text)]">
+          <HighlightText text={row.partyName} term={search} />
+        </span>
+      ),
       sortValue: (row) => row.partyName,
     },
     {
@@ -160,7 +208,12 @@ export function FinancePaymentsPage(): React.JSX.Element {
           <span className="text-[var(--text-3)]">On account</span>
         ) : (
           <span className="text-[var(--text-2)]">
-            {row.allocations.map((allocation) => allocation.documentNumber).join(", ")}
+            {row.allocations.map((allocation, index) => (
+              <span key={allocation.documentId}>
+                {index > 0 && ", "}
+                <HighlightText text={allocation.documentNumber} term={search} />
+              </span>
+            ))}
           </span>
         ),
     },
@@ -169,7 +222,9 @@ export function FinancePaymentsPage(): React.JSX.Element {
       header: "Amount",
       align: "end",
       cell: (row) => (
-        <span className="tabular font-medium">{formatAmount(row.amountFils)}</span>
+        <span className="tabular font-medium">
+          <HighlightText text={formatAmount(row.amountFils)} term={search} />
+        </span>
       ),
       sortValue: (row) => row.amountFils,
     },
@@ -297,7 +352,8 @@ export function FinancePaymentsPage(): React.JSX.Element {
 
           {rows.length > 0 && (
             <span className="ms-auto text-[12.5px] text-[var(--text-3)]">
-              {rows.length} payments · {formatMoney(total)}
+              {isSearching ? `${visible.length} of ${rows.length}` : rows.length} payments ·{" "}
+              {formatMoney(total)}
             </span>
           )}
         </div>
@@ -310,27 +366,47 @@ export function FinancePaymentsPage(): React.JSX.Element {
           <DataTable
             frameless
             columns={columns}
-            rows={rows}
-            rowKey={(row) => row.id}
+            rows={visible}
+            rowKey={paymentKey}
+            highlightedRowKeys={highlight.keys}
+            primaryRowKey={highlight.primaryKey}
+            scrollToRowKey={highlight.primaryKey}
             caption="Payments and receipts"
             compact
             emptyState={
-              <EmptyState
-                compact
-                icon={
-                  direction === "inbound" ? (
-                    <ArrowDownLeft className="h-5 w-5" />
-                  ) : (
-                    <ArrowUpRight className="h-5 w-5" />
-                  )
-                }
-                title={direction === "inbound" ? "No money received yet" : "No money paid out yet"}
-                description={
-                  direction === "inbound"
-                    ? "Receipts from customers appear here as soon as they are recorded."
-                    : "Payments to suppliers and expenses appear here as soon as they are recorded."
-                }
-              />
+              isSearching ? (
+                <EmptyState
+                  compact
+                  icon={
+                    direction === "inbound" ? (
+                      <ArrowDownLeft className="h-5 w-5" />
+                    ) : (
+                      <ArrowUpRight className="h-5 w-5" />
+                    )
+                  }
+                  title="No payments match"
+                  description={`Nothing in this list contains “${search.trim()}”. Clear the search to see every payment.`}
+                />
+              ) : (
+                <EmptyState
+                  compact
+                  icon={
+                    direction === "inbound" ? (
+                      <ArrowDownLeft className="h-5 w-5" />
+                    ) : (
+                      <ArrowUpRight className="h-5 w-5" />
+                    )
+                  }
+                  title={
+                    direction === "inbound" ? "No money received yet" : "No money paid out yet"
+                  }
+                  description={
+                    direction === "inbound"
+                      ? "Receipts from customers appear here as soon as they are recorded."
+                      : "Payments to suppliers and expenses appear here as soon as they are recorded."
+                  }
+                />
+              )
             }
           />
         )}

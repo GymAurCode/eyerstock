@@ -150,7 +150,9 @@ async function seed(): Promise<void> {
     description: "Shop rent",
   });
 }
-await seed().catch((e: unknown) => console.log("seed note:", String(e)));
+// Pass the value through rather than stringifying it: the error may be an
+// object, and the console renders it with its stack, which is more useful.
+await seed().catch((e: unknown) => console.log("seed note:", e));
 
 // --- walk ------------------------------------------------------------------
 const PAGES: readonly (readonly [string, string])[] = [

@@ -26,7 +26,13 @@ export default tseslint.config(
   {
     languageOptions: {
       parserOptions: {
-        projectService: true,
+        // Two files stand outside every tsconfig on purpose: the theme
+        // bootstrap is a plain script loaded before the bundle exists, and the
+        // visual review is a standalone developer tool. Everything else is
+        // resolved through the project references in `tsconfig.json`.
+        projectService: {
+          allowDefaultProject: ["src/renderer/public/theme-boot.js", "visual-review.mts"],
+        },
         tsconfigRootDir: import.meta.dirname,
       },
       globals: {
@@ -156,27 +162,10 @@ export default tseslint.config(
   {
     files: ["e2e/**/*.ts"],
     languageOptions: {
-      parserOptions: {
-        // E2E specs are their own TS project (tsconfig.e2e.json) because their
-        // `page.evaluate` callbacks run in the renderer and need the DOM lib,
-        // which the Node-side app config deliberately does not expose. Without
-        // this the project service cannot resolve them and parsing fails.
-        projectService: {
-          defaultProject: "./tsconfig.e2e.json",
-          // The two files below are not part of any tsconfig: the theme
-          // bootstrap is a plain script loaded before the bundle exists, and
-          // the visual review is a standalone tool. Both are still linted,
-          // they just need to be allowed to stand outside a project.
-          allowDefaultProject: [
-            "e2e/*.ts",
-            "src/renderer/public/theme-boot.js",
-            "visual-review.mts",
-          ],
-          // Fourteen files stand outside a tsconfig, more than the service's
-          // default ceiling of eight.
-          maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 16,
-        },
-      },
+      // E2E specs are their own TS project (`tsconfig.e2e.json`, referenced
+      // from `tsconfig.json`) because their `page.evaluate` callbacks run in
+      // the renderer and need the DOM lib, which the Node-side app config
+      // deliberately does not expose.
       globals: {
         ...globals.node,
         ...globals.browser,

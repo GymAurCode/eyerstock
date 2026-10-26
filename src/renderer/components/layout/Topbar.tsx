@@ -31,6 +31,7 @@ import {
   Monitor,
   Moon,
   Package,
+  Palette,
   Receipt,
   Search,
   Settings,
@@ -43,6 +44,7 @@ import { useApp, useTheme, type ThemePreference } from "../../lib/app-context";
 import { formatMoney } from "../../lib/format";
 import { useLookup } from "../../lib/lookups";
 import { cn } from "../../lib/utils";
+import { THEME_CATALOG } from "../../../shared/themes";
 import type { DocumentDto, PartyDto, ProductDto } from "../../../shared/types";
 import { Avatar } from "../ui/Avatar";
 import { Badge } from "../ui/Badge";
@@ -217,7 +219,20 @@ export function Topbar({ title, onOpenNav }: TopbarProps): React.JSX.Element {
           </button>
         )}
 
-        <ThemeToggle theme={resolvedTheme} onChange={(next) => void setTheme(next)} />
+        <ThemeToggle
+          theme={resolvedTheme}
+          onChange={(next) => void setTheme(next)}
+          // Staff cannot open Settings, so the shortcut is only offered when
+          // the destination is actually reachable. The light/dark choice above
+          // still works for everyone.
+          onExplore={
+            canSeeSettings
+              ? () => {
+                  void navigate("/settings?tab=appearance");
+                }
+              : undefined
+          }
+        />
 
         {user !== null && (
           <div className="relative ms-1 border-s border-[var(--border)] ps-3">
@@ -336,13 +351,20 @@ function MenuItem({
  * toasts and all - repaints in the same frame rather than component by
  * component. The same choice is also in Settings › Appearance; both write the
  * same stored preference.
+ *
+ * The menu also advertises the full catalogue. Most people never open
+ * Settings, so a light/dark toggle on its own would hide the fifteen colour
+ * packs entirely; the last entry takes them straight to the picker.
  */
 function ThemeToggle({
   theme,
   onChange,
+  onExplore,
 }: {
   readonly theme: "light" | "dark";
   readonly onChange: (next: ThemePreference) => void;
+  /** Omitted when the signed-in user cannot open Settings. */
+  readonly onExplore?: (() => void) | undefined;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
@@ -392,7 +414,7 @@ function ThemeToggle({
           />
           <div
             role="menu"
-            className="card glass-float absolute end-0 top-[calc(100%+8px)] z-20 w-40 p-1"
+            className="card glass-float absolute end-0 top-[calc(100%+8px)] z-20 w-52 p-1"
           >
             {options.map((option) => (
               <button
@@ -416,6 +438,34 @@ function ThemeToggle({
                 {option.label}
               </button>
             ))}
+
+            {onExplore !== undefined && (
+              <>
+                <div role="separator" className="my-1 h-px bg-[var(--divider)]" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    onExplore();
+                  }}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-md px-3 py-2 text-start text-[13px]",
+                    "text-[var(--text-2)] transition-colors duration-fast",
+                    "hover:bg-[var(--surface-2)] hover:text-[var(--text)]",
+                  )}
+                >
+                  <Palette className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span className="min-w-0 flex-1">Explore more themes</span>
+                  <span
+                    className="rounded-full bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-3)]"
+                    aria-hidden="true"
+                  >
+                    {THEME_CATALOG.length}
+                  </span>
+                </button>
+              </>
+            )}
           </div>
         </>
       )}

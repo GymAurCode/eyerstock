@@ -38,9 +38,11 @@ import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { ConfirmDialog, Dialog } from "../../components/ui/Dialog";
 import { type Column, DataTable } from "../../components/ui/DataTable";
+import { HighlightText } from "../../components/ui/HighlightText";
 import { Badge, type BadgeTone } from "../../components/ui/Badge";
 import { EmptyState, PageHeader, TableSkeleton } from "../../components/ui/Feedback";
 import { Field, Input, MoneyInput, Select, Textarea } from "../../components/ui/Input";
+import { useSearchHighlight } from "../../lib/search-highlight";
 import { FinanceLayout } from "./FinanceLayout";
 
 const SOURCE_OPTIONS: readonly { value: string; label: string }[] = [
@@ -66,6 +68,20 @@ const STATUS_TONES: Readonly<Record<string, BadgeTone>> = {
   posted: "success",
   reversed: "neutral",
 };
+
+const journalKey = (row: JournalEntryRowDto): number => row.id;
+
+/** The same three fields `finance.journal.list` searches. */
+const JOURNAL_SEARCH_FIELDS = [
+  (row: JournalEntryRowDto) => row.entryNo,
+  (row: JournalEntryRowDto) => row.description,
+  (row: JournalEntryRowDto) => row.reference,
+];
+
+const JOURNAL_RANK_FIELDS = [
+  (row: JournalEntryRowDto) => row.entryNo,
+  (row: JournalEntryRowDto) => row.description,
+];
 
 export function JournalEntriesPage(): React.JSX.Element {
   const { can, settings } = useApp();
@@ -97,6 +113,12 @@ export function JournalEntriesPage(): React.JSX.Element {
 
   const rows = useMemo(() => data ?? [], [data]);
 
+  const highlight = useSearchHighlight(rows, search, {
+    rowKey: journalKey,
+    fields: JOURNAL_SEARCH_FIELDS,
+    rankFields: JOURNAL_RANK_FIELDS,
+  });
+
   const totals = useMemo(
     () => ({
       count: rows.length,
@@ -111,7 +133,11 @@ export function JournalEntriesPage(): React.JSX.Element {
       id: "entryNo",
       header: "Entry",
       widthClass: "w-44",
-      cell: (row) => <span className="tabular font-medium">{row.entryNo}</span>,
+      cell: (row) => (
+        <span className="tabular font-medium">
+          <HighlightText text={row.entryNo} term={search} />
+        </span>
+      ),
       sortValue: (row) => row.entryNo,
     },
     {
@@ -126,9 +152,13 @@ export function JournalEntriesPage(): React.JSX.Element {
       header: "Description",
       cell: (row) => (
         <div className="min-w-0">
-          <div className="truncate text-[var(--text)]">{row.description}</div>
+          <div className="truncate text-[var(--text)]">
+            <HighlightText text={row.description} term={search} />
+          </div>
           {row.reference !== null && (
-            <div className="truncate text-[11.5px] text-[var(--text-3)]">{row.reference}</div>
+            <div className="truncate text-[11.5px] text-[var(--text-3)]">
+              <HighlightText text={row.reference} term={search} />
+            </div>
           )}
         </div>
       ),
@@ -352,10 +382,13 @@ export function JournalEntriesPage(): React.JSX.Element {
             frameless
             columns={columns}
             rows={rows}
-            rowKey={(row) => row.id}
+            rowKey={journalKey}
             onRowClick={(row) => {
               void call("finance.journal.get", { id: row.id }).then(setViewing);
             }}
+            highlightedRowKeys={highlight.keys}
+            primaryRowKey={highlight.primaryKey}
+            scrollToRowKey={highlight.primaryKey}
             caption="Journal entries"
             compact
             emptyState={

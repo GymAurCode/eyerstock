@@ -31,6 +31,7 @@ import { call, errorMessage, hasBridge } from "./api";
 import { prefetchLookups } from "./lookups";
 
 import type { ThemePreference } from "../../shared/ipc";
+import { DEFAULT_THEME_ID, normaliseThemeId, type ThemeId } from "../../shared/themes";
 
 export type { ThemePreference };
 
@@ -44,6 +45,16 @@ export type Theme = Exclude<ThemePreference, "system">;
  */
 const THEME_STORAGE_KEY = "eyerstock.theme";
 
+/**
+ * The paint-time hint for the colour pack.
+ *
+ * Same contract as `THEME_STORAGE_KEY`: the database is authoritative, this is
+ * only what `theme-boot.js` can read before the bridge answers. Unknown ids are
+ * ignored by the stylesheet anyway, and `storedPalette` normalises them to the
+ * default before they reach React.
+ */
+const PALETTE_STORAGE_KEY = "eyerstock.themePalette";
+
 /** Resolve a preference to the theme actually applied. */
 export function resolveTheme(preference: ThemePreference): Theme {
   if (preference === "system") {
@@ -53,40 +64,42 @@ export function resolveTheme(preference: ThemePreference): Theme {
 }
 
 /**
- * Put the theme on <html>.
+ * Put the appearance on <html>.
  *
- * Every colour in the app is a CSS variable scoped to :root or .dark, so this
- * one class swap repaints dialogs, tables, charts, toasts, inputs and
- * scrollbars at once - there is no per-component state to keep in sync.
+ * Every colour in the app is a CSS variable scoped to `:root`, `.dark` and the
+ * palette block, so this one class/attribute swap repaints dialogs, tables,
+ * charts, toasts, inputs and scrollbars at once - there is no per-component
+ * state to keep in sync.
  */
-export function applyThemeToDocument(preference: ThemePreference): void {
+export function applyThemeToDocument(preference: ThemePreference, palette: ThemeId): void {
   const resolved = resolveTheme(preference);
   const root = document.documentElement;
   root.classList.toggle("dark", resolved === "dark");
   root.setAttribute("data-theme", resolved);
+  root.setAttribute("data-palette", palette);
 }
 
 /**
- * Apply a user-chosen theme with a short, compositor-only wash.
+ * Apply a user-chosen appearance with a short, compositor-only wash.
  *
  * The theme itself is applied immediately: changing the class on <html> is what
  * makes the app feel like it answered the click. The old page colour is then
  * laid over the window at low opacity and faded out, which gives the eye a
- * 180ms transition without snapshotting the whole page. A view transition was
+ * 220ms transition without snapshotting the whole page. A view transition was
  * measured first and cost roughly 80ms more before the first frame; this wash
  * costs one extra paint and then only opacity, which the compositor owns.
  *
  * Reduced motion gets the immediate swap with no wash.
  */
-function applyThemeWithTransition(preference: ThemePreference): void {
+function applyThemeWithTransition(preference: ThemePreference, palette: ThemeId): void {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    applyThemeToDocument(preference);
+    applyThemeToDocument(preference, palette);
     return;
   }
 
   const root = document.documentElement;
   const previousBackground = getComputedStyle(root).getPropertyValue("--bg").trim();
-  applyThemeToDocument(preference);
+  applyThemeToDocument(preference, palette);
 
   // A second toggle while the first wash is still running replaces it rather
   // than stacking veils.
@@ -114,6 +127,31 @@ function storedThemePreference(): ThemePreference {
     /* Storage denial falls back to the database value below. */
   }
   return "system";
+}
+
+/**
+ * The pack last mirrored for the pre-paint script.
+ *
+ * A localStorage value can be stale or hand-edited, so it is validated against
+ * the catalogue rather than trusted; anything unrecognised starts on the
+ * default pack, exactly as a fresh install does.
+ */
+function storedPalette(): ThemeId {
+  try {
+    return normaliseThemeId(window.localStorage.getItem(PALETTE_STORAGE_KEY) ?? DEFAULT_THEME_ID);
+  } catch {
+    return DEFAULT_THEME_ID;
+  }
+}
+
+/** Keep the paint-time hints in step with what is actually on screen. */
+function mirrorAppearance(preference: ThemePreference, palette: ThemeId): void {
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, preference);
+    localStorage.setItem(PALETTE_STORAGE_KEY, palette);
+  } catch {
+    /* The database write is the source of truth. */
+  }
 }
 
 export interface SetupInput {
@@ -162,7 +200,10 @@ export interface ThemeState {
   readonly theme: ThemePreference;
   /** The preference with `system` resolved against the OS appearance. */
   readonly resolvedTheme: Theme;
+  /** The colour pack, independent of the light/dark preference. */
+  readonly palette: ThemeId;
   setTheme(theme: ThemePreference): Promise<void>;
+  setPalette(palette: ThemeId): Promise<void>;
 }
 
 const AppContext = createContext<AppState | null>(null);
@@ -214,6 +255,7 @@ export function AppProvider({ children }: AppProviderProps): React.JSX.Element {
 
 const FALLBACK_SETTINGS: AppSettingsSnapshot = {
   theme: "system",
+  themePalette: DEFAULT_THEME_ID,
   companyName: "EyerStock",
   companyTrn: "",
   companyAddress: "",
@@ -254,41 +296,38 @@ function AppStateProvider({ children }: { readonly children: ReactNode }): React
   const [settings, setSettings] = useState<AppSettingsSnapshot>(FALLBACK_SETTINGS);
   const [setupRequired, setSetupRequired] = useState(true);
 
-  const [themePreference, setThemePreference] =
-    useState<ThemePreference>(storedThemePreference);
-  const [resolvedTheme, setResolvedTheme] = useState<Theme>(() =>
-    resolveTheme(themePreference),
-  );
-  // The DOM and the ref move in the same tick as the click. React state is a
+  const [themePreference, setThemePreference] = useState<ThemePreference>(storedThemePreference);
+  const [palette, setPaletteState] = useState<ThemeId>(storedPalette);
+  const [resolvedTheme, setResolvedTheme] = useState<Theme>(() => resolveTheme(themePreference));
+  // The DOM and the refs move in the same tick as the click. React state is a
   // render behind, which is enough for two fast clicks to disagree about what
-  // the previous theme was and leave the app on the wrong one.
+  // the previous appearance was and leave the app on the wrong one.
   const themePreferenceRef = useRef<ThemePreference>(themePreference);
+  const paletteRef = useRef<ThemeId>(palette);
 
-  const adoptTheme = useCallback((preference: ThemePreference): void => {
+  const adoptAppearance = useCallback((preference: ThemePreference, nextPalette: ThemeId): void => {
     themePreferenceRef.current = preference;
+    paletteRef.current = nextPalette;
     setThemePreference(preference);
+    setPaletteState(nextPalette);
     setResolvedTheme(resolveTheme(preference));
-    applyThemeToDocument(preference);
-    // Keep the pre-paint hint in step, so the next launch paints the same theme
-    // the database says rather than flashing the default.
-    try {
-      localStorage.setItem(THEME_STORAGE_KEY, preference);
-    } catch {
-      /* Private-mode storage denial is not worth failing a theme switch over. */
-    }
+    applyThemeToDocument(preference, nextPalette);
+    // Keep the pre-paint hints in step, so the next launch paints the same
+    // appearance the database says rather than flashing the default.
+    mirrorAppearance(preference, nextPalette);
   }, []);
 
   const loadSettings = useCallback(async (): Promise<void> => {
     try {
       const snapshot = await call("settings.get", {});
       setSettings(snapshot);
-      adoptTheme(snapshot.theme);
+      adoptAppearance(snapshot.theme, snapshot.themePalette);
     } catch (error) {
       // Settings are needed to render, so a failure here is worth surfacing
       // once rather than silently falling back forever.
       toast.error(errorMessage(error));
     }
-  }, [adoptTheme]);
+  }, [adoptAppearance]);
 
   const refreshSession = useCallback(async (): Promise<void> => {
     try {
@@ -410,7 +449,10 @@ function AppStateProvider({ children }: { readonly children: ReactNode }): React
 
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const onChange = (): void => {
-      applyThemeToDocument("system");
+      // The pack does not change with the OS: only which of its two modes is
+      // shown. Reading the ref keeps this listener from re-subscribing every
+      // time the user picks a different pack.
+      applyThemeToDocument("system", paletteRef.current);
       setResolvedTheme(resolveTheme("system"));
     };
     media.addEventListener("change", onChange);
@@ -460,42 +502,55 @@ function AppStateProvider({ children }: { readonly children: ReactNode }): React
     client.clear();
   }, [client]);
 
-  const setTheme = useCallback(
-    async (theme: ThemePreference): Promise<void> => {
-      // Applied to <html> immediately, before the write is awaited. Persisting
-      // goes over IPC and back, which is far too slow to wait on: the toggle
-      // would sit unresponsive for a frame or two before anything changed.
-      // The write still happens, and a failure rolls the class back.
-      const previous = themePreferenceRef.current;
-      if (theme === previous) return;
+  const setTheme = useCallback(async (theme: ThemePreference): Promise<void> => {
+    // Applied to <html> immediately, before the write is awaited. Persisting
+    // goes over IPC and back, which is far too slow to wait on: the toggle
+    // would sit unresponsive for a frame or two before anything changed.
+    // The write still happens, and a failure rolls the class back.
+    const previous = themePreferenceRef.current;
+    if (theme === previous) return;
 
-      themePreferenceRef.current = theme;
-      setThemePreference(theme);
-      setResolvedTheme(resolveTheme(theme));
-      applyThemeWithTransition(theme);
-      try {
-        localStorage.setItem(THEME_STORAGE_KEY, theme);
-      } catch {
-        /* The database write below is the source of truth. */
-      }
+    themePreferenceRef.current = theme;
+    setThemePreference(theme);
+    setResolvedTheme(resolveTheme(theme));
+    applyThemeWithTransition(theme, paletteRef.current);
+    mirrorAppearance(theme, paletteRef.current);
 
-      try {
-        await call("settings.update", { theme });
-      } catch (error) {
-        themePreferenceRef.current = previous;
-        setThemePreference(previous);
-        setResolvedTheme(resolveTheme(previous));
-        applyThemeToDocument(previous);
-        try {
-          localStorage.setItem(THEME_STORAGE_KEY, previous);
-        } catch {
-          /* Nothing else to undo. */
-        }
-        toast.error(errorMessage(error));
-      }
-    },
-    [],
-  );
+    try {
+      await call("settings.update", { theme });
+    } catch (error) {
+      themePreferenceRef.current = previous;
+      setThemePreference(previous);
+      setResolvedTheme(resolveTheme(previous));
+      applyThemeToDocument(previous, paletteRef.current);
+      mirrorAppearance(previous, paletteRef.current);
+      toast.error(errorMessage(error));
+    }
+  }, []);
+
+  const setPalette = useCallback(async (next: ThemeId): Promise<void> => {
+    // Same optimistic contract as `setTheme`: paint now, persist behind the
+    // click, roll back visibly if the write is refused. The two choices are
+    // independent, so only the palette field is sent - picking a colour pack
+    // can never quietly change whether the app is light or dark.
+    const previous = paletteRef.current;
+    if (next === previous) return;
+
+    paletteRef.current = next;
+    setPaletteState(next);
+    applyThemeWithTransition(themePreferenceRef.current, next);
+    mirrorAppearance(themePreferenceRef.current, next);
+
+    try {
+      await call("settings.update", { themePalette: next });
+    } catch (error) {
+      paletteRef.current = previous;
+      setPaletteState(previous);
+      applyThemeToDocument(themePreferenceRef.current, previous);
+      mirrorAppearance(themePreferenceRef.current, previous);
+      toast.error(errorMessage(error));
+    }
+  }, []);
 
   const activateLicense = useCallback(
     async (key: string): Promise<void> => {
@@ -574,9 +629,11 @@ function AppStateProvider({ children }: { readonly children: ReactNode }): React
     () => ({
       theme: themePreference,
       resolvedTheme,
+      palette,
       setTheme,
+      setPalette,
     }),
-    [themePreference, resolvedTheme, setTheme],
+    [themePreference, resolvedTheme, palette, setTheme, setPalette],
   );
 
   return (

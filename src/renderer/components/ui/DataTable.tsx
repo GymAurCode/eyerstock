@@ -9,7 +9,7 @@
  * Compact: 40px rows, 36px header, 13px text.
  */
 
-import { type ReactNode, useCallback, useMemo, useRef } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef } from "react";
 import { ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { cn } from "../../lib/utils";
@@ -17,6 +17,7 @@ import { cn } from "../../lib/utils";
 const VIRTUALISE_ABOVE_ROWS = 150;
 const OVERSCAN_ROWS = 12;
 const NO_HIDDEN_COLUMNS: readonly string[] = [];
+const NO_HIGHLIGHTS: ReadonlySet<string | number> = new Set();
 
 export interface Column<T> {
   readonly id: string;
@@ -69,6 +70,33 @@ export interface DataTableProps<T> {
    * fight with the stylesheet's cascade; a flag is unambiguous.
    */
   readonly frameless?: boolean | undefined;
+  /**
+   * Rows whose cells contain the current search term. They receive the subtle
+   * accent tint and the inline-start indicator; every other row stays plain.
+   */
+  readonly highlightedRowKeys?: ReadonlySet<string | number> | undefined;
+  /** The best match, drawn more strongly than the other matching rows. */
+  readonly primaryRowKey?: string | number | null | undefined;
+  /**
+   * Bring this row into view once, after it has rendered.
+   *
+   * The table checks whether the row is already visible first, and remembers
+   * the key it has handled so a re-render cannot scroll (or flash) it again.
+   * Virtualised tables scroll by index; short tables use `scrollIntoView`.
+   */
+  readonly scrollToRowKey?: string | number | null | undefined;
+}
+
+/** Is the row inside both the table viewport and the window? */
+function isRowVisible(row: HTMLElement, container: HTMLElement): boolean {
+  const rowRect = row.getBoundingClientRect();
+  const containerRect = container.getBoundingClientRect();
+  const headerHeight = container.querySelector("thead")?.getBoundingClientRect().height ?? 0;
+
+  const visibleTop = Math.max(containerRect.top + headerHeight, 0);
+  const visibleBottom = Math.min(containerRect.bottom, window.innerHeight);
+
+  return rowRect.top >= visibleTop - 1 && rowRect.bottom <= visibleBottom + 1;
 }
 
 export function DataTable<T>({
@@ -89,6 +117,9 @@ export function DataTable<T>({
   hiddenColumnIds = NO_HIDDEN_COLUMNS,
   maxBodyHeight,
   frameless = false,
+  highlightedRowKeys = NO_HIGHLIGHTS,
+  primaryRowKey = null,
+  scrollToRowKey = null,
 }: DataTableProps<T>): React.JSX.Element {
   const hidden = useMemo(() => new Set(hiddenColumnIds), [hiddenColumnIds]);
   const visible = useMemo(
@@ -110,6 +141,42 @@ export function DataTable<T>({
   });
 
   const virtualItems = shouldVirtualise ? rowVirtualizer.getVirtualItems() : [];
+
+  // Scroll the requested row into view once. Keeping the last handled key
+  // means a re-render caused by the filter itself cannot pull the table back
+  // after the reader has scrolled away, and clearing the search clears it too.
+  const lastScrolledKeyRef = useRef<string | number | null>(null);
+
+  useEffect(() => {
+    if (scrollToRowKey === null || scrollToRowKey === undefined) {
+      lastScrolledKeyRef.current = null;
+      return;
+    }
+
+    const container = scrollRef.current;
+    if (container === null) return;
+
+    const index = rows.findIndex((row) => rowKey(row) === scrollToRowKey);
+    if (index < 0) return;
+
+    const keyed = Array.from(
+      container.querySelectorAll<HTMLElement>("tr[data-row-key]"),
+    ).find((element) => element.dataset["rowKey"] === String(scrollToRowKey));
+
+    if (keyed !== undefined) {
+      if (lastScrolledKeyRef.current === scrollToRowKey && isRowVisible(keyed, container)) return;
+      keyed.scrollIntoView({ block: "nearest", inline: "nearest" });
+      lastScrolledKeyRef.current = scrollToRowKey;
+      return;
+    }
+
+    // A long table may not have rendered the row yet. The virtualiser knows
+    // where it is even when no element for it exists.
+    if (shouldVirtualise) {
+      rowVirtualizer.scrollToIndex(index, { align: "center" });
+      lastScrolledKeyRef.current = scrollToRowKey;
+    }
+  }, [scrollToRowKey, rows, rowKey, shouldVirtualise, rowVirtualizer]);
 
   const renderHead = useCallback(
     () => (
@@ -176,53 +243,75 @@ export function DataTable<T>({
   );
 
   const renderRow = useCallback(
-    (row: T, rowIndex: number) => (
-      <tr
-        key={rowKey(row)}
-        onClick={
-          onRowClick === undefined
-            ? undefined
-            : () => {
-                onRowClick(row);
-              }
-        }
-        onKeyDown={
-          onRowClick === undefined
-            ? undefined
-            : (event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
+    (row: T, rowIndex: number) => {
+      const rowId = rowKey(row);
+      const isPrimary =
+        primaryRowKey !== null && primaryRowKey !== undefined && rowId === primaryRowKey;
+      const isMatch = isPrimary || highlightedRowKeys.has(rowId);
+
+      return (
+        <tr
+          key={rowId}
+          data-row-key={rowId}
+          data-highlight={isPrimary ? "primary" : isMatch ? "match" : undefined}
+          onClick={
+            onRowClick === undefined
+              ? undefined
+              : () => {
                   onRowClick(row);
                 }
-              }
-        }
-        tabIndex={onRowClick === undefined ? undefined : 0}
-        aria-rowindex={shouldVirtualise ? rowIndex + 3 : rowIndex + 1}
-        ref={shouldVirtualise ? rowVirtualizer.measureElement : undefined}
-        data-index={shouldVirtualise ? rowIndex : undefined}
-        className={cn(
-          "border-b border-[var(--border)] transition-colors duration-fast last:border-0",
-          "hover:bg-[var(--table-row-hover)]",
-          onRowClick !== undefined && "cursor-pointer",
-        )}
-      >
-        {visible.map((column) => (
-          <td
-            key={column.id}
-            className={cn(
-              cellPadding,
-              "align-middle text-[13.5px] text-[var(--text)]",
-              column.align === "end" && "tabular text-end",
-              column.align === "center" && "text-center",
-              column.className,
-            )}
-          >
-            {column.cell(row) ?? <span className="text-[var(--text-3)]">—</span>}
-          </td>
-        ))}
-      </tr>
-    ),
-    [visible, cellPadding, rowKey, onRowClick, shouldVirtualise, rowVirtualizer.measureElement],
+          }
+          onKeyDown={
+            onRowClick === undefined
+              ? undefined
+              : (event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onRowClick(row);
+                  }
+                }
+          }
+          tabIndex={onRowClick === undefined ? undefined : 0}
+          aria-rowindex={shouldVirtualise ? rowIndex + 3 : rowIndex + 1}
+          ref={shouldVirtualise ? rowVirtualizer.measureElement : undefined}
+          data-index={shouldVirtualise ? rowIndex : undefined}
+          className={cn(
+            "border-b border-[var(--border)] transition-colors duration-fast last:border-0",
+            isPrimary
+              ? "table-row-match table-row-match-primary"
+              : isMatch
+                ? "table-row-match"
+                : "hover:bg-[var(--table-row-hover)]",
+            onRowClick !== undefined && "cursor-pointer",
+          )}
+        >
+          {visible.map((column) => (
+            <td
+              key={column.id}
+              className={cn(
+                cellPadding,
+                "align-middle text-[13.5px] text-[var(--text)]",
+                column.align === "end" && "tabular text-end",
+                column.align === "center" && "text-center",
+                column.className,
+              )}
+            >
+              {column.cell(row) ?? <span className="text-[var(--text-3)]">—</span>}
+            </td>
+          ))}
+        </tr>
+      );
+    },
+    [
+      visible,
+      cellPadding,
+      rowKey,
+      onRowClick,
+      shouldVirtualise,
+      rowVirtualizer.measureElement,
+      highlightedRowKeys,
+      primaryRowKey,
+    ],
   );
 
   const renderBody = () => {

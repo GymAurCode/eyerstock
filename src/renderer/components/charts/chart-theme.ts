@@ -46,7 +46,9 @@ export function chartColorForName(name: string): string {
  *
  * Most colour work needs nothing (the variables resolve themselves), but a
  * chart that reads a resolved value through `getComputedStyle` - to pick a
- * readable label colour, say - needs to know the theme moved.
+ * readable label colour, say - needs to know the appearance moved. Both the
+ * mode class and the pack attribute are watched: a pack change repaints every
+ * variable without touching `class`.
  */
 import { useEffect, useState } from "react";
 
@@ -61,7 +63,7 @@ export function useThemeVersion(): number {
     });
     observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ["class"],
+      attributeFilter: ["class", "data-theme", "data-palette"],
     });
     return () => {
       observer.disconnect();

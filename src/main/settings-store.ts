@@ -9,9 +9,11 @@
 
 import type { SqliteDatabase } from "../data/connection";
 import type { AppSettingsSnapshot, ThemePreference } from "../shared/ipc";
+import { DEFAULT_THEME_ID, normaliseThemeId, type ThemeId } from "../shared/themes";
 
 export const SETTING_KEYS = {
   theme: "theme",
+  themePalette: "theme_palette",
   companyName: "company_name",
   companyTrn: "company_trn",
   companyAddress: "company_address",
@@ -31,6 +33,7 @@ export const SETTING_KEYS = {
 
 export const DEFAULT_SNAPSHOT: AppSettingsSnapshot = {
   theme: "light",
+  themePalette: DEFAULT_THEME_ID,
   companyName: "",
   companyTrn: "",
   companyAddress: "",
@@ -89,6 +92,18 @@ function asThemePreference(value: string | undefined): ThemePreference {
     : DEFAULT_SNAPSHOT.theme;
 }
 
+/**
+ * Read the stored colour pack.
+ *
+ * An installation that predates the palette feature has no row at all, and a
+ * row written by a newer build may name a pack this build does not ship. Both
+ * land on Ocean Teal, which is exactly what those installations look like
+ * today, so upgrading never changes a single pixel on its own.
+ */
+function asThemePalette(value: string | undefined): ThemeId {
+  return value === undefined ? DEFAULT_THEME_ID : normaliseThemeId(value);
+}
+
 /** Snapshot with the file-backed backup settings merged in from the caller. */
 export function loadSnapshot(
   db: SqliteDatabase,
@@ -101,6 +116,7 @@ export function loadSnapshot(
 
   return {
     theme: asThemePreference(raw.get(SETTING_KEYS.theme)),
+    themePalette: asThemePalette(raw.get(SETTING_KEYS.themePalette)),
     companyName: asString(raw.get(SETTING_KEYS.companyName), DEFAULT_SNAPSHOT.companyName),
     companyTrn: asString(raw.get(SETTING_KEYS.companyTrn), DEFAULT_SNAPSHOT.companyTrn),
     companyAddress: asString(raw.get(SETTING_KEYS.companyAddress), DEFAULT_SNAPSHOT.companyAddress),
@@ -147,6 +163,7 @@ export function loadSnapshot(
 
 const WRITABLE: readonly (keyof AppSettingsSnapshot)[] = [
   "theme",
+  "themePalette",
   "companyName",
   "companyTrn",
   "companyAddress",
@@ -166,6 +183,8 @@ export function settingKeyFor(field: keyof AppSettingsSnapshot): string | null {
   switch (field) {
     case "theme":
       return SETTING_KEYS.theme;
+    case "themePalette":
+      return SETTING_KEYS.themePalette;
     case "companyName":
       return SETTING_KEYS.companyName;
     case "companyTrn":

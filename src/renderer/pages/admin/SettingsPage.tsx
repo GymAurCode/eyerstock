@@ -14,12 +14,13 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { FolderOpen, RotateCcw, Save } from "lucide-react";
 import type { AppSettingsSnapshot, BackupFileInfo, UpdateState } from "../../../shared/ipc";
 import { DEFAULT_PARTNER_SHARE_PERCENT } from "../../../shared/finance";
 import type { PartnerDto, PartnerTransactionDto, UserDto } from "../../../shared/types";
 import { bridge, call, errorMessage } from "../../lib/api";
-import { useApp, useTheme } from "../../lib/app-context";
+import { useApp } from "../../lib/app-context";
 import { useUpdates } from "../../lib/updates";
 import { formatFileSize, formatMoney } from "../../lib/format";
 import { formatDate } from "../../lib/utils";
@@ -31,6 +32,7 @@ import { ConfirmDialog, Dialog } from "../../components/ui/Dialog";
 import { Field, Input, Select, Switch, Textarea } from "../../components/ui/Input";
 import { RowActions, type TabDefinition } from "../../components/ui/Dropdown";
 import { PageHeader } from "../../components/ui/Feedback";
+import { AppearanceTab } from "./AppearancePanel";
 import { toast } from "sonner";
 
 const TABS: readonly TabDefinition[] = [
@@ -44,11 +46,22 @@ const TABS: readonly TabDefinition[] = [
 
 export function SettingsPage(): React.JSX.Element {
   const { can } = useApp();
-  const [tab, setTab] = useState("company");
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Users are an Administrator concern: Staff cannot manage accounts, and a
   // tab they cannot use is a dead end.
   const tabs = TABS.filter((entry) => entry.id !== "users" || can("users", "view"));
+
+  // The open section lives in the URL (`#/settings?tab=appearance`) so other
+  // screens can link straight to it - the topbar's theme menu does. An unknown
+  // or unavailable id falls back to Company instead of rendering a blank pane.
+  const requested = searchParams.get("tab");
+  const tab =
+    requested !== null && tabs.some((entry) => entry.id === requested) ? requested : "company";
+
+  const selectTab = (id: string): void => {
+    setSearchParams({ tab: id }, { replace: true });
+  };
 
   // The active tab registers its save function here so the sticky Save bar can
   // trigger it without the parent knowing what each tab does.
@@ -76,7 +89,7 @@ export function SettingsPage(): React.JSX.Element {
               key={entry.id}
               type="button"
               onClick={() => {
-                setTab(entry.id);
+                selectTab(entry.id);
               }}
               className={`flex h-9 w-full items-center rounded-lg px-3 text-start text-[13px] font-medium transition-colors duration-fast ${
                 tab === entry.id
@@ -1172,147 +1185,6 @@ function BackupTab({
           }}
         />
       )}
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* appearance                                                                 */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Theme choice.
- *
- * Three large, labelled previews rather than a select: picking a theme is a
- * visual decision, and the point of the choice is what the screen looks like,
- * so each option shows its own colours rather than a word.
- *
- * Nothing here is staged for a Save button. The choice is applied to <html>
- * the instant it is made, so there is nothing pending to commit.
- */
-function AppearanceTab(): React.JSX.Element {
-  const { theme, setTheme } = useTheme();
-
-  // The swatches are the palettes from `styles.css`, written out as literals
-  // because the point of a preview is to show the *other* theme, which the
-  // tokens cannot do - they always describe the theme in force right now.
-  const options = [
-    {
-      value: "light",
-      label: "Light",
-      hint: "Bright surfaces, dark text",
-      preview: {
-        bg: "#FFFFFF",
-        surface: "#FFFFFF",
-        line: "#E5E7EB",
-        brand: "#12706B",
-        text: "#1F2937",
-      },
-    },
-    {
-      value: "dark",
-      label: "Dark",
-      hint: "Dim surfaces, light text",
-      preview: {
-        bg: "#082522",
-        surface: "#0D2E2A",
-        line: "#1C423C",
-        brand: "#041C1A",
-        text: "#FFFFFF",
-      },
-    },
-    {
-      value: "system",
-      label: "System",
-      hint: "Follow this device",
-      preview: null,
-    },
-  ] as const;
-
-  return (
-    <div className="space-y-5">
-      <section>
-        <h2 className="text-sm font-semibold text-[var(--text)]">Theme</h2>
-        <p className="mt-0.5 text-xs text-[var(--text-2)]">
-          Applies immediately across the whole app, including dialogs, tables and printed previews.
-        </p>
-
-        <div className="mt-3 grid grid-cols-3 gap-3">
-          {options.map((option) => {
-            const active = theme === option.value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                aria-pressed={active}
-                onClick={() => {
-                  void setTheme(option.value);
-                }}
-                className={`rounded-xl border p-2 text-start transition-colors duration-fast ${
-                  active
-                    ? "border-[var(--brand)] ring-2 ring-[color-mix(in_srgb,var(--brand)_28%,transparent)]"
-                    : "border-[var(--border)] hover:border-[var(--border-strong)]"
-                }`}
-              >
-                {option.preview !== null ? (
-                  <span
-                    className="block h-20 w-full overflow-hidden rounded-lg border"
-                    style={{
-                      background: option.preview.bg,
-                      borderColor: option.preview.line,
-                    }}
-                  >
-                    <span
-                      className="block h-3 w-full"
-                      style={{ background: option.preview.surface }}
-                    />
-                    <span className="flex gap-1 p-2">
-                      <span
-                        className="block w-3 rounded"
-                        style={{ background: option.preview.brand }}
-                      />
-                      <span className="flex-1 space-y-1">
-                        <span
-                          className="block h-1.5 w-full rounded"
-                          style={{ background: option.preview.line }}
-                        />
-                        <span
-                          className="block h-1.5 w-3/4 rounded"
-                          style={{ background: option.preview.line }}
-                        />
-                        <span
-                          className="block h-1.5 w-1/2 rounded"
-                          style={{ background: option.preview.text, opacity: 0.7 }}
-                        />
-                      </span>
-                    </span>
-                  </span>
-                ) : (
-                  <span className="flex h-20 w-full items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-2)]">
-                    <span className="text-2xl">◐</span>
-                  </span>
-                )}
-
-                <span className="mt-2 block text-[13px] font-medium text-[var(--text)]">
-                  {option.label}
-                </span>
-                <span className="block text-[11px] text-[var(--text-3)]">{option.hint}</span>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="border-t border-[var(--divider)] pt-4">
-        <h2 className="text-sm font-semibold text-[var(--text)]">Preview</h2>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Badge tone="success">Paid</Badge>
-          <Badge tone="warning">Part paid</Badge>
-          <Badge tone="danger">Overdue</Badge>
-          <Badge tone="info">Draft</Badge>
-          <span className="tabular text-sm text-[var(--text)]">1,250.00</span>
-        </div>
-      </section>
     </div>
   );
 }

@@ -8,6 +8,7 @@
  */
 
 import { z } from "zod";
+import { THEME_IDS } from "./themes";
 
 const isoDate = z
   .string()
@@ -329,6 +330,15 @@ export const settingsGetSchema = z.object({});
 export const settingsUpdateSchema = z
   .object({
     theme: z.enum(["light", "dark", "system"]).optional(),
+    /**
+     * The colour pack, validated against the shipped catalogue.
+     *
+     * This schema is `.strict()`, so a field it does not list is rejected
+     * outright. That is deliberate: an unknown pack is a client bug, and
+     * silently storing it would leave the window on whatever colours the
+     * stylesheet fell back to.
+     */
+    themePalette: z.enum(THEME_IDS).optional(),
     companyName: z.string().trim().max(120).optional(),
     companyTrn: z.string().trim().max(32).optional(),
     companyAddress: z.string().trim().max(240).optional(),

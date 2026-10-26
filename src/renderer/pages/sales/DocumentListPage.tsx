@@ -47,11 +47,13 @@ import {
   Pagination,
   useTableView,
 } from "../../components/ui/Dropdown";
+import { HighlightText } from "../../components/ui/HighlightText";
 import { RecordActions, type RecordAction } from "../../components/ui/RecordActions";
 import { EmptyState, PageHeader, TableSkeleton } from "../../components/ui/Feedback";
 import { Field, Input, Select, type SelectOption } from "../../components/ui/Input";
 import { DOCUMENT_STATUS_OPTIONS } from "../../lib/select-options";
 import { invoiceDocumentHtml, saveInvoicePdf } from "../../lib/print";
+import { useSearchHighlight } from "../../lib/search-highlight";
 import {
   DocumentPrintDialog,
   type PrintableDocument,
@@ -62,6 +64,19 @@ export type DocumentListKind = "invoice" | "purchaseInvoice";
 export interface DocumentListPageProps {
   readonly kind: DocumentListKind;
 }
+
+const documentKey = (row: DocumentDto): number => row.id;
+
+/** The same two fields `documents.list` searches. */
+const DOCUMENT_SEARCH_FIELDS = [
+  (row: DocumentDto) => row.number,
+  (row: DocumentDto) => row.partyName,
+];
+
+const DOCUMENT_RANK_FIELDS = [
+  (row: DocumentDto) => row.number,
+  (row: DocumentDto) => row.partyName,
+];
 
 const STATUS_LABELS: Record<DocumentStatus, string> = {
   draft: "Draft",
@@ -152,6 +167,11 @@ export function DocumentListPage({ kind }: DocumentListPageProps): React.JSX.Ele
   });
 
   const rows = useMemo(() => data ?? [], [data]);
+  const highlight = useSearchHighlight(rows, search, {
+    rowKey: documentKey,
+    fields: DOCUMENT_SEARCH_FIELDS,
+    rankFields: DOCUMENT_RANK_FIELDS,
+  });
   // The detail dialog shows the document as it is now, not as it was when it
   // was opened, so a payment recorded from it is reflected the moment the
   // list refreshes - and the Update payment button disappears on its own once
@@ -370,13 +390,21 @@ export function DocumentListPage({ kind }: DocumentListPageProps): React.JSX.Ele
     {
       id: "number",
       header: isPurchase ? "Purchase No." : "Invoice No.",
-      cell: (row) => <span className="tabular font-medium text-[var(--text)]">{row.number}</span>,
+      cell: (row) => (
+        <span className="tabular font-medium text-[var(--text)]">
+          <HighlightText text={row.number} term={search} />
+        </span>
+      ),
       sortValue: (row) => row.number,
     },
     {
       id: "party",
       header: partyLabel,
-      cell: (row) => <span className="text-[var(--text)]">{row.partyName ?? "—"}</span>,
+      cell: (row) => (
+        <span className="text-[var(--text)]">
+          {row.partyName === null ? "—" : <HighlightText text={row.partyName} term={search} />}
+        </span>
+      ),
       sortValue: (row) => row.partyName,
     },
     {
@@ -433,7 +461,10 @@ export function DocumentListPage({ kind }: DocumentListPageProps): React.JSX.Ele
     },
   ];
 
-  const view = useTableView(rows, columns);
+  const view = useTableView(rows, columns, 25, {
+    focusKey: highlight.primaryKey,
+    rowKey: documentKey,
+  });
 
   const totalGross = rows.reduce((sum, row) => sum + row.grossFils, 0);
   const totalPaid = rows.reduce((sum, row) => sum + row.paidFils, 0);
@@ -698,6 +729,9 @@ export function DocumentListPage({ kind }: DocumentListPageProps): React.JSX.Ele
               sortDirection={view.sortDirection}
               onSortChange={view.setSort}
               hiddenColumnIds={view.hiddenColumnIds}
+              highlightedRowKeys={highlight.keys}
+              primaryRowKey={highlight.primaryKey}
+              scrollToRowKey={highlight.primaryKey}
               caption={title}
               compact
               emptyState={

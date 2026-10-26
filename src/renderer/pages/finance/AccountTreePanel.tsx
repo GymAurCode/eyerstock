@@ -52,6 +52,15 @@ const CATEGORY_ICONS: Readonly<Record<AccountType, typeof Wallet>> = {
   expense: Receipt,
 };
 
+/** The ink each category icon wears. Identity colours, never states. */
+const CATEGORY_INK: Readonly<Record<AccountType, string>> = {
+  asset: "text-[var(--gold)]",
+  liability: "text-[var(--warning)]",
+  equity: "text-[var(--violet)]",
+  income: "text-[var(--teal)]",
+  expense: "text-[var(--danger)]",
+};
+
 const TYPE_OPTIONS: readonly { value: string; label: string }[] = [
   { value: "asset", label: "Asset" },
   { value: "liability", label: "Liability" },
@@ -316,14 +325,14 @@ function CategoryGroup({
         <span
           className={cn(
             "glass-chip h-6 w-6 shrink-0 text-[var(--text-2)]",
-            category.type === "asset" && "chip-brand",
+            category.type === "asset" && "chip-gold",
             category.type === "liability" && "chip-amber",
             category.type === "equity" && "chip-violet",
             category.type === "income" && "chip-teal",
             category.type === "expense" && "chip-rose",
           )}
         >
-          <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icon className={cn("h-3.5 w-3.5", CATEGORY_INK[category.type])} aria-hidden="true" />
         </span>
 
         <span className="text-[13px] font-semibold text-[var(--text)]">{category.label}</span>

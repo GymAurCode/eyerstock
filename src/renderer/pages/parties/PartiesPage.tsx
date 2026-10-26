@@ -31,6 +31,7 @@ import {
 } from "../../components/print/DocumentPrintDialog";
 import { type Column, DataTable } from "../../components/ui/DataTable";
 import { Pagination, useTableView } from "../../components/ui/Dropdown";
+import { HighlightText } from "../../components/ui/HighlightText";
 import {
   RecordActions,
   standardRecordActions,
@@ -45,10 +46,27 @@ import {
   Switch,
   type SelectOption,
 } from "../../components/ui/Input";
+import { useSearchHighlight } from "../../lib/search-highlight";
 
 const METHODS = ["cash", "bank", "card"] as const;
 
 type Method = (typeof METHODS)[number];
+
+const partyKey = (row: PartyDto): number => row.id;
+
+/** The same fields `parties.list` searches. */
+const PARTY_SEARCH_FIELDS = [
+  (row: PartyDto) => row.name,
+  (row: PartyDto) => row.code,
+  (row: PartyDto) => row.phone,
+  (row: PartyDto) => row.trn,
+];
+
+const PARTY_RANK_FIELDS = [
+  (row: PartyDto) => row.name,
+  (row: PartyDto) => row.code,
+  (row: PartyDto) => row.phone,
+];
 
 const METHOD_LABELS: Record<Method, string> = {
   cash: "Cash",
@@ -93,6 +111,12 @@ export function PartiesPage({
 
   const rows = useMemo(() => data ?? [], [data]);
 
+  const highlight = useSearchHighlight(rows, search, {
+    rowKey: partyKey,
+    fields: PARTY_SEARCH_FIELDS,
+    rankFields: PARTY_RANK_FIELDS,
+  });
+
   const totals = useMemo(
     () => ({
       owed: rows.reduce((sum, row) => sum + Math.max(0, row.balanceFils), 0),
@@ -132,8 +156,12 @@ export function PartiesPage({
         <div className="flex min-w-0 items-center gap-2.5">
           <Avatar name={row.name} size="sm" square />
           <div className="min-w-0">
-            <p className="truncate font-medium text-[var(--text)]">{row.name}</p>
-            <p className="tabular truncate text-xs text-[var(--text-3)]">{row.code}</p>
+            <p className="truncate font-medium text-[var(--text)]">
+              <HighlightText text={row.name} term={search} />
+            </p>
+            <p className="tabular truncate text-xs text-[var(--text-3)]">
+              <HighlightText text={row.code} term={search} />
+            </p>
           </div>
         </div>
       ),
@@ -144,7 +172,9 @@ export function PartiesPage({
       header: "Contact",
       cell: (row) => (
         <div className="min-w-0">
-          <p className="tabular truncate text-[var(--text)]">{row.phone ?? "—"}</p>
+          <p className="tabular truncate text-[var(--text)]">
+            {row.phone === null ? "—" : <HighlightText text={row.phone} term={search} />}
+          </p>
           <p className="truncate text-xs text-[var(--text-3)]">{row.email ?? "—"}</p>
         </div>
       ),
@@ -267,7 +297,10 @@ export function PartiesPage({
       });
   };
 
-  const view = useTableView(rows, columns);
+  const view = useTableView(rows, columns, 25, {
+    focusKey: highlight.primaryKey,
+    rowKey: partyKey,
+  });
 
   const openEditor = (): void => {
     setEditing(null);
@@ -389,6 +422,9 @@ export function PartiesPage({
               sortDirection={view.sortDirection}
               onSortChange={view.setSort}
               hiddenColumnIds={view.hiddenColumnIds}
+              highlightedRowKeys={highlight.keys}
+              primaryRowKey={highlight.primaryKey}
+              scrollToRowKey={highlight.primaryKey}
               caption={isCustomer ? "Customers" : "Suppliers"}
               compact
               emptyState={

@@ -91,6 +91,10 @@ const config: Config = {
           DEFAULT: "var(--teal)",
           soft: "var(--teal-soft)",
         },
+        gold: {
+          DEFAULT: "var(--gold)",
+          soft: "var(--gold-soft)",
+        },
         sidebar: {
           DEFAULT: "var(--sidebar-bg)",
           hover: "var(--sidebar-hover)",

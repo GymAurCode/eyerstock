@@ -44,11 +44,24 @@ import {
 } from "../../components/print/DocumentPrintDialog";
 import { type Column, DataTable } from "../../components/ui/DataTable";
 import { Pagination, useTableView } from "../../components/ui/Dropdown";
+import { HighlightText } from "../../components/ui/HighlightText";
 import { RecordActions, standardRecordActions } from "../../components/ui/RecordActions";
 import { EmptyState, PageHeader, TableSkeleton } from "../../components/ui/Feedback";
 import { Field, Input, Select, type SelectOption } from "../../components/ui/Input";
+import { useSearchHighlight } from "../../lib/search-highlight";
 
 const UNITS = ["pcs", "litre", "metre", "box", "set", "kg", "hour"] as const;
+
+const productKey = (row: ProductDto): number => row.id;
+
+/** The same fields `products.list` searches. */
+const PRODUCT_SEARCH_FIELDS = [
+  (row: ProductDto) => row.name,
+  (row: ProductDto) => row.sku,
+  (row: ProductDto) => row.barcode,
+];
+
+const PRODUCT_RANK_FIELDS = [(row: ProductDto) => row.name, (row: ProductDto) => row.sku];
 
 /** The unit list the catalogue offers, as select options. */
 const unitOptions: SelectOption[] = UNITS.map((value) => ({ value, label: value }));
@@ -91,6 +104,12 @@ export function ProductsPage(): React.JSX.Element {
 
   const rows = useMemo(() => data ?? [], [data]);
 
+  const highlight = useSearchHighlight(rows, search, {
+    rowKey: productKey,
+    fields: PRODUCT_SEARCH_FIELDS,
+    rankFields: PRODUCT_RANK_FIELDS,
+  });
+
   const categories = useMemo(
     () =>
       Array.from(
@@ -116,7 +135,9 @@ export function ProductsPage(): React.JSX.Element {
       cell: (row) => (
         <div className="flex min-w-0 items-center gap-2.5">
           <Avatar name={row.name} size="sm" square tone="neutral" />
-          <span className="truncate font-medium text-[var(--text)]">{row.name}</span>
+          <span className="truncate font-medium text-[var(--text)]">
+            <HighlightText text={row.name} term={search} />
+          </span>
         </div>
       ),
       sortValue: (row) => row.name,
@@ -124,7 +145,11 @@ export function ProductsPage(): React.JSX.Element {
     {
       id: "sku",
       header: "SKU",
-      cell: (row) => <span className="tabular text-[var(--text-2)]">{row.sku}</span>,
+      cell: (row) => (
+        <span className="tabular text-[var(--text-2)]">
+          <HighlightText text={row.sku} term={search} />
+        </span>
+      ),
       sortValue: (row) => row.sku,
     },
     {
@@ -267,7 +292,10 @@ export function ProductsPage(): React.JSX.Element {
       });
   };
 
-  const view = useTableView(rows, columns);
+  const view = useTableView(rows, columns, 25, {
+    focusKey: highlight.primaryKey,
+    rowKey: productKey,
+  });
 
   const openEditor = (): void => {
     setEditing(null);
@@ -379,6 +407,9 @@ export function ProductsPage(): React.JSX.Element {
               sortDirection={view.sortDirection}
               onSortChange={view.setSort}
               hiddenColumnIds={view.hiddenColumnIds}
+              highlightedRowKeys={highlight.keys}
+              primaryRowKey={highlight.primaryKey}
+              scrollToRowKey={highlight.primaryKey}
               caption="Products"
               compact
               emptyState={

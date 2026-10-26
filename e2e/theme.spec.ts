@@ -15,6 +15,38 @@ import {
  * localStorage. This test exercises both paths against the real application.
  */
 
+test("the theme menu leads to the full theme catalogue", async () => {
+  const dataDir = createTestDataDir();
+  let testApp: TestApp | null = null;
+
+  try {
+    testApp = await launchApp(dataDir);
+    const page = testApp.window;
+    await completeSetup(page);
+    await waitForDashboard(page);
+
+    await page.getByRole("button", { name: /^Theme:/ }).click();
+    const explore = page.getByRole("menuitem", { name: /Explore more themes/i });
+    await expect(explore).toBeVisible();
+    await explore.click();
+
+    // The shortcut has to open Settings on the Appearance section, not merely
+    // land on the Company tab where the themes are hidden.
+    await expect(page).toHaveURL(/#\/settings\?tab=appearance$/);
+    await expect(page.getByRole("heading", { name: /Appearance & Themes/i })).toBeVisible();
+    await expect(
+      page
+        .getByRole("navigation", { name: /settings sections/i })
+        .getByRole("button", { name: "Appearance", exact: true }),
+    ).toHaveAttribute("aria-current", "page");
+    await expect(page.getByText("15 of 15 themes shown.")).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Ocean Teal/ })).toBeVisible();
+  } finally {
+    if (testApp !== null) await testApp.close();
+    removeTestDataDir(dataDir);
+  }
+});
+
 test("theme applies immediately and survives a relaunch", async () => {
   const dataDir = createTestDataDir();
   let testApp: TestApp | null = null;

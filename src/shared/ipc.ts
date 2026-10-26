@@ -6,6 +6,8 @@
  * validates every payload before acting on it.
  */
 
+import type { ThemeId } from "./themes";
+
 export interface AppInfo {
   readonly name: string;
   readonly version: string;
@@ -580,6 +582,15 @@ export type ThemePreference = "light" | "dark" | "system";
 
 export interface AppSettingsSnapshot {
   readonly theme: ThemePreference;
+  /**
+   * The colour pack, independent of the light/dark preference above.
+   *
+   * The two are separate choices: `theme` says how bright the screen is and
+   * `themePalette` says which family of colours it uses. Keeping them apart is
+   * what lets a shop run "Midnight Navy in dark" without the stored value
+   * having to enumerate thirty combinations.
+   */
+  readonly themePalette: ThemeId;
   readonly companyName: string;
   readonly companyTrn: string;
   readonly companyAddress: string;

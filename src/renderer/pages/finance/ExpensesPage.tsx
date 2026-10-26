@@ -24,6 +24,7 @@ import {
   type PrintableDocument,
 } from "../../components/print/DocumentPrintDialog";
 import { Pagination, useTableView } from "../../components/ui/Dropdown";
+import { HighlightText } from "../../components/ui/HighlightText";
 import {
   RecordActions,
   standardRecordActions,
@@ -33,6 +34,12 @@ import { type Column, DataTable } from "../../components/ui/DataTable";
 import { EmptyState, PageHeader, TableSkeleton } from "../../components/ui/Feedback";
 import { Badge } from "../../components/ui/Badge";
 import { Field, Input, MoneyInput, Select, type SelectOption } from "../../components/ui/Input";
+import { useSearchHighlight } from "../../lib/search-highlight";
+
+const expenseKey = (row: ExpenseDto): number => row.id;
+
+/** The only field `expenses.list` searches. */
+const EXPENSE_SEARCH_FIELDS = [(row: ExpenseDto) => row.description];
 
 const CATEGORIES = [
   "rent",
@@ -134,6 +141,10 @@ export function ExpensesPage(): React.JSX.Element {
   };
 
   const rows = useMemo(() => data ?? [], [data]);
+  const highlight = useSearchHighlight(rows, search, {
+    rowKey: expenseKey,
+    fields: EXPENSE_SEARCH_FIELDS,
+  });
   const total = useMemo(() => rows.reduce((sum, row) => sum + row.amountFils, 0), [rows]);
 
   const columns: readonly Column<ExpenseDto>[] = [
@@ -154,7 +165,11 @@ export function ExpensesPage(): React.JSX.Element {
     {
       id: "description",
       header: "Description",
-      cell: (row) => <span className="text-[var(--text)]">{row.description}</span>,
+      cell: (row) => (
+        <span className="text-[var(--text)]">
+          <HighlightText text={row.description} term={search} />
+        </span>
+      ),
       sortValue: (row) => row.description,
     },
     {
@@ -226,7 +241,10 @@ export function ExpensesPage(): React.JSX.Element {
     });
   }
 
-  const view = useTableView(rows, columns);
+  const view = useTableView(rows, columns, 25, {
+    focusKey: highlight.primaryKey,
+    rowKey: expenseKey,
+  });
 
   const openEditor = (): void => {
     setEditing(null);
@@ -410,6 +428,9 @@ export function ExpensesPage(): React.JSX.Element {
               sortDirection={view.sortDirection}
               onSortChange={view.setSort}
               hiddenColumnIds={view.hiddenColumnIds}
+              highlightedRowKeys={highlight.keys}
+              primaryRowKey={highlight.primaryKey}
+              scrollToRowKey={highlight.primaryKey}
               caption="Expenses"
               compact
               emptyState={

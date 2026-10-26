@@ -37,9 +37,11 @@ import { Button } from "../../components/ui/Button";
 import { Card, CardHeader } from "../../components/ui/Card";
 import { Dialog } from "../../components/ui/Dialog";
 import { type Column, DataTable } from "../../components/ui/DataTable";
+import { HighlightText } from "../../components/ui/HighlightText";
 import { Badge } from "../../components/ui/Badge";
 import { EmptyState, PageHeader, TableSkeleton } from "../../components/ui/Feedback";
 import { Field, Input } from "../../components/ui/Input";
+import { useSearchHighlight } from "../../lib/search-highlight";
 import { DateRangePicker, FinanceLayout } from "./FinanceLayout";
 import { DATE_RANGE_PRESETS, resolveDateRange, type DateRangePreset } from "../../lib/finance";
 
@@ -58,6 +60,11 @@ const BUCKET_LABELS: Readonly<Record<AgingBucket, string>> = {
   d61_90: "61–90 days",
   d90plus: "Over 90 days",
 };
+
+const balanceKey = (row: PartyBalanceDto): number => row.partyId;
+
+/** Party balances are filtered in the renderer, so the name is the only field. */
+const BALANCE_SEARCH_FIELDS = [(row: PartyBalanceDto) => row.partyName];
 
 function PartyBalancesPage({ kind }: { readonly kind: PartyLedgerKind }): React.JSX.Element {
   const { can } = useApp();
@@ -98,6 +105,13 @@ function PartyBalancesPage({ kind }: { readonly kind: PartyLedgerKind }): React.
     return balances.filter((balance) => balance.partyName.toLowerCase().includes(term));
   }, [balances, search]);
 
+  const highlight = useSearchHighlight(visible, search, {
+    rowKey: balanceKey,
+    fields: BALANCE_SEARCH_FIELDS,
+  });
+
+  const isSearching = search.trim().length > 0;
+
   const totals = useMemo(
     () => ({
       outstanding: balances.reduce((sum, balance) => sum + balance.outstandingFils, 0),
@@ -110,7 +124,11 @@ function PartyBalancesPage({ kind }: { readonly kind: PartyLedgerKind }): React.
     {
       id: "party",
       header: isCustomer ? "Customer" : "Supplier",
-      cell: (row) => <span className="font-medium text-[var(--text)]">{row.partyName}</span>,
+      cell: (row) => (
+        <span className="font-medium text-[var(--text)]">
+          <HighlightText text={row.partyName} term={search} />
+        </span>
+      ),
       sortValue: (row) => row.partyName,
     },
     {
@@ -213,8 +231,10 @@ function PartyBalancesPage({ kind }: { readonly kind: PartyLedgerKind }): React.
             </div>
             {balances.length > 0 && (
               <span className="ms-auto text-[12.5px] text-[var(--text-3)]">
-                {balances.length} {isCustomer ? "customers" : "suppliers"} ·{" "}
-                {formatMoney(totals.outstanding)} outstanding
+                {isSearching
+                  ? `${visible.length} of ${balances.length} ${isCustomer ? "customers" : "suppliers"}`
+                  : `${balances.length} ${isCustomer ? "customers" : "suppliers"}`}{" "}
+                · {formatMoney(totals.outstanding)} outstanding
                 {totals.overdue > 0 && ` · ${formatMoney(totals.overdue)} overdue`}
               </span>
             )}
@@ -229,20 +249,32 @@ function PartyBalancesPage({ kind }: { readonly kind: PartyLedgerKind }): React.
               frameless
               columns={columns}
               rows={visible}
-              rowKey={(row) => row.partyId}
+              rowKey={balanceKey}
+              highlightedRowKeys={highlight.keys}
+              primaryRowKey={highlight.primaryKey}
+              scrollToRowKey={highlight.primaryKey}
               caption={isCustomer ? "Customer receivables" : "Supplier payables"}
               compact
               emptyState={
-                <EmptyState
-                  compact
-                  icon={<Users className="h-5 w-5" />}
-                  title={isCustomer ? "Nothing is outstanding" : "Nothing is owed"}
-                  description={
-                    isCustomer
-                      ? "Every customer invoice has been settled."
-                      : "Every supplier bill has been paid."
-                  }
-                />
+                isSearching ? (
+                  <EmptyState
+                    compact
+                    icon={<Users className="h-5 w-5" />}
+                    title="No parties match"
+                    description={`No ${isCustomer ? "customer" : "supplier"} name contains “${search.trim()}”. Clear the search to see every balance.`}
+                  />
+                ) : (
+                  <EmptyState
+                    compact
+                    icon={<Users className="h-5 w-5" />}
+                    title={isCustomer ? "Nothing is outstanding" : "Nothing is owed"}
+                    description={
+                      isCustomer
+                        ? "Every customer invoice has been settled."
+                        : "Every supplier bill has been paid."
+                    }
+                  />
+                )
               }
             />
           )}

@@ -21,7 +21,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { cn } from "../../lib/utils";
 
-export type ChipTone = "brand" | "violet" | "cyan" | "teal" | "amber" | "rose" | "neutral";
+export type ChipTone = "brand" | "violet" | "cyan" | "teal" | "gold" | "amber" | "rose" | "neutral";
 
 /**
  * Tone class names, written out in full.
@@ -37,6 +37,7 @@ const CHIP_TONE_CLASS: Record<ChipTone, string> = {
   violet: "chip-violet",
   cyan: "chip-cyan",
   teal: "chip-teal",
+  gold: "chip-gold",
   amber: "chip-amber",
   rose: "chip-rose",
   neutral: "chip-neutral",

@@ -10,7 +10,8 @@
 import type { ReactNode } from "react";
 import { cn } from "../../lib/utils";
 
-export type BadgeTone = "brand" | "success" | "warning" | "danger" | "info" | "violet" | "neutral";
+export type BadgeTone =
+  "brand" | "success" | "warning" | "danger" | "info" | "violet" | "gold" | "neutral";
 
 const TONES: Record<BadgeTone, string> = {
   brand:
@@ -26,6 +27,8 @@ const TONES: Record<BadgeTone, string> = {
   // in every row and never implies something is wrong.
   violet:
     "bg-[var(--violet-soft)] text-[var(--violet)] border-[color-mix(in_srgb,var(--violet)_32%,transparent)]",
+  // The asset category's identity colour. Like violet, it never means a state.
+  gold: "bg-[var(--gold-soft)] text-[var(--gold)] border-[color-mix(in_srgb,var(--gold)_32%,transparent)]",
   neutral: "bg-[var(--surface-2)] text-[var(--text-2)] border-[var(--glass-border)]",
 };
 

@@ -17,7 +17,7 @@
  * figure on this screen has to guess which way round it is.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeftRight,
@@ -49,8 +49,10 @@ import { Badge, type BadgeTone } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { Dialog } from "../../components/ui/Dialog";
 import { type Column, DataTable } from "../../components/ui/DataTable";
+import { HighlightText } from "../../components/ui/HighlightText";
 import { EmptyState, TableSkeleton, Tooltip } from "../../components/ui/Feedback";
 import { Input } from "../../components/ui/Input";
+import { useSearchHighlight, type SearchHighlight } from "../../lib/search-highlight";
 import { DateRangePicker } from "./FinanceLayout";
 
 /** The three things this panel can show about an account. */
@@ -75,6 +77,23 @@ const PERIOD_PRESETS: readonly { readonly value: string; readonly label: string 
 /** Rows per page in the transaction history. */
 const PAGE_SIZE = 20;
 
+const ledgerKey = (row: LedgerLineDto): number => row.lineId;
+
+/** The same five fields the transaction search has always matched. */
+const LEDGER_SEARCH_FIELDS = [
+  (row: LedgerLineDto) => row.entryNo,
+  (row: LedgerLineDto) => row.documentNumber,
+  (row: LedgerLineDto) => row.description,
+  (row: LedgerLineDto) => row.partyName,
+  (row: LedgerLineDto) => row.reference,
+];
+
+const LEDGER_RANK_FIELDS = [
+  (row: LedgerLineDto) => row.documentNumber,
+  (row: LedgerLineDto) => row.entryNo,
+  (row: LedgerLineDto) => row.description,
+];
+
 /**
  * Below this panel width the reference and status columns are dropped.
  *
@@ -85,7 +104,7 @@ const PAGE_SIZE = 20;
 const NARROW_PANEL_PX = 820;
 
 const TYPE_TONES: Readonly<Record<string, BadgeTone>> = {
-  asset: "info",
+  asset: "gold",
   liability: "warning",
   equity: "violet",
   income: "success",
@@ -165,22 +184,45 @@ export function AccountDetailPanel({
     [accounts, account],
   );
 
-  // A new search starts at the first page; staying on page 7 of a list that
-  // has just been filtered is how a reader ends up looking at nothing.
-  const term = search.trim().toLowerCase();
-  const filtered = useMemo(() => {
-    const rows = ledger?.rows ?? [];
-    if (term.length === 0) return rows;
-    return rows.filter((row) =>
-      [row.entryNo, row.documentNumber, row.description, row.partyName, row.reference]
-        .filter((value): value is string => value !== null && value !== undefined)
-        .some((value) => value.toLowerCase().includes(term)),
-    );
-  }, [ledger, term]);
+  // A new search starts at the first page, then moves to the best match if
+  // there is one. Staying on page 7 of a list that has just been filtered is
+  // how a reader ends up looking at nothing.
+  const ledgerRows = useMemo(() => ledger?.rows ?? [], [ledger]);
+  const highlight = useSearchHighlight(ledgerRows, search, {
+    rowKey: ledgerKey,
+    fields: LEDGER_SEARCH_FIELDS,
+    rankFields: LEDGER_RANK_FIELDS,
+  });
+
+  const filtered = useMemo(
+    () =>
+      highlight.active
+        ? ledgerRows.filter((row) => highlight.keys.has(ledgerKey(row)))
+        : ledgerRows,
+    [ledgerRows, highlight],
+  );
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount - 1);
   const pageRows = filtered.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);
+
+  // Jump once to the page holding the best match. Manual paging afterwards is
+  // the reader's, so the handled key is remembered until the search changes.
+  const handledFocusRef = useRef<string | number | null>(null);
+  useEffect(() => {
+    const key = highlight.primaryKey;
+    if (key === null) {
+      handledFocusRef.current = null;
+      return;
+    }
+    if (handledFocusRef.current === key) return;
+
+    const index = filtered.findIndex((row) => ledgerKey(row) === key);
+    if (index < 0) return;
+
+    handledFocusRef.current = key;
+    setPage(Math.floor(index / PAGE_SIZE));
+  }, [highlight.primaryKey, filtered]);
 
   if (account === null) {
     return (
@@ -349,6 +391,7 @@ export function AccountDetailPanel({
           isLoading={isLoading}
           normalBalance={account.normalBalance}
           narrow={panelWidth > 0 && panelWidth < NARROW_PANEL_PX}
+          highlight={highlight}
           onSearchChange={(value) => {
             setSearch(value);
             setPage(0);
@@ -361,11 +404,7 @@ export function AccountDetailPanel({
       )}
 
       {tab === "information" && (
-        <Information
-          account={account}
-          accounts={accounts}
-          aggregatedFils={aggregatedFils}
-        />
+        <Information account={account} accounts={accounts} aggregatedFils={aggregatedFils} />
       )}
 
       <JournalEntryDialog
@@ -508,6 +547,7 @@ function History({
   isLoading,
   normalBalance,
   narrow,
+  highlight,
   onSearchChange,
   onPageChange,
   onOpenEntry,
@@ -522,6 +562,7 @@ function History({
   readonly isLoading: boolean;
   readonly normalBalance: "debit" | "credit";
   readonly narrow: boolean;
+  readonly highlight: SearchHighlight<LedgerLineDto>;
   readonly onSearchChange: (value: string) => void;
   readonly onPageChange: (page: number) => void;
   readonly onOpenEntry: (entryId: number) => void;
@@ -552,11 +593,11 @@ function History({
           className="group/ref min-w-0 w-full text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
         >
           <span className="tabular block truncate text-[11.5px] font-medium text-[var(--text)] underline decoration-transparent underline-offset-2 transition-colors duration-fast group-hover/ref:decoration-[var(--brand)]">
-            {row.documentNumber ?? row.entryNo}
+            <HighlightText text={row.documentNumber ?? row.entryNo} term={search} />
           </span>
           {row.documentNumber !== null && (
             <span className="tabular block truncate text-[10.5px] text-[var(--text-3)]">
-              {row.entryNo}
+              <HighlightText text={row.entryNo} term={search} />
             </span>
           )}
         </button>
@@ -579,16 +620,25 @@ function History({
       header: "Description",
       cell: (row) => (
         <div className="min-w-0" title={row.description ?? undefined}>
-          <div className="truncate text-[13px] text-[var(--text)]">{row.description ?? "—"}</div>
+          <div className="truncate text-[13px] text-[var(--text)]">
+            {row.description === null ? "—" : <HighlightText text={row.description} term={search} />}
+          </div>
           {/*
             When the reference has no column of its own - the panel is too
             narrow for one - the entry number moves under the description
-            rather than being pushed off the edge.
+            rather than being pushed off the edge. The party and the reference
+            are marked here too: either can be what was searched for, and a
+            match the reader cannot see is not a highlight.
           */}
           <div className="truncate text-[11px] text-[var(--text-3)]">
-            {narrow
-              ? [row.entryNo, row.partyName].filter(Boolean).join(" · ")
-              : (row.partyName ?? "")}
+            {[narrow ? row.entryNo : null, row.partyName, row.reference]
+              .filter((value): value is string => value !== null && value.length > 0)
+              .map((value, index) => (
+                <Fragment key={`${String(index)}-${value}`}>
+                  {index > 0 && " · "}
+                  <HighlightText text={value} term={search} />
+                </Fragment>
+              ))}
           </div>
         </div>
       ),
@@ -736,8 +786,11 @@ function History({
             fixed
             columns={columns}
             rows={rows}
-            rowKey={(row) => row.lineId}
+            rowKey={ledgerKey}
             hiddenColumnIds={narrow ? ["reference", "status"] : []}
+            highlightedRowKeys={highlight.keys}
+            primaryRowKey={highlight.primaryKey}
+            scrollToRowKey={highlight.primaryKey}
             caption="Transactions on this account"
             emptyState={
               <EmptyState
