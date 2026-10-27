@@ -4,10 +4,11 @@
  * Eyercall's own side of the split: the mark, the company name, one line
  * about what the product does, and the three things it is good at.
  *
- * It is the dark half in both themes. It is Eyercall's space rather than
- * part of the working surface, so it deliberately does not flip with the app -
- * which is why its colours come from the sign-in panel's own tokens and not
- * from the app's, which move with the theme.
+ * Its colours are the chosen theme's navigation rail. The panel borrows the
+ * rail's background, ink, hairline and chip values, so the sign-in screen and
+ * the signed-in application never disagree about which pack is in use. The
+ * accent is the pack's brand colour, pulled towards the rail's ink so it stays
+ * readable on both a deep and a pale rail.
  *
  * The decoration is a block of boxes drawn in outline. The mark on the logo
  * is a box, and boxes are what this software counts. It is one faint line
@@ -62,7 +63,7 @@ export function BrandPanel(): React.JSX.Element {
       className={cn(
         "auth-panel relative isolate flex shrink-0 flex-row items-center gap-3",
         "px-6 py-4 text-[var(--auth-panel-ink)]",
-        "shadow-[inset_-1px_0_0_rgba(255,255,255,0.07)]",
+        "shadow-[inset_-1px_0_0_var(--auth-panel-line)]",
         "animate-auth-panel-in",
         // Wide enough to hold the copy and the ruling, narrow enough to leave
         // the form the larger half of the screen.
@@ -92,7 +93,7 @@ export function BrandPanel(): React.JSX.Element {
           everywhere else, so it belongs to the product rather than floating
           on the panel. */}
       <div className="flex items-center gap-3">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] border border-[var(--auth-panel-line)] bg-[var(--auth-panel-chip)] shadow-[inset_0_1px_0_rgba(255,255,255,0.09)]">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] border border-[var(--auth-panel-line)] bg-[var(--auth-panel-chip)] shadow-[inset_0_1px_0_var(--auth-panel-line)]">
           <img src={logoUrl} alt="" className="h-[30px] w-[30px] object-contain" />
         </span>
         <div className="min-w-0">

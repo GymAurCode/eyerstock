@@ -231,31 +231,11 @@
     /* ================================================================
      * The sign-in panel.
      *
-     * The login screen is a split, and this is the brand half of it. It is the
-     * deep half in both themes: it is Eyercall's own space rather than part of
-     * the working surface, so it deliberately does not flip with the app.
-     *
-     * That is also why its ink cannot be read from the app's text tokens -
-     * those move with the theme, and a panel that stayed deep teal while its
-     * text went dark would be unreadable. Its colours are declared here
-     * instead, once, and are the only palette in the app that does not follow
-     * the theme.
-     *
-     * The accent is the teal of the Eyercall mark, used sparingly: a line, an
-     * icon, a chip. The panel's depth comes from one deep base value, one soft
-     * light and one faint ruling - never from decoration.
+     * The login screen is a split, and the brand half is derived from the
+     * active palette at the panel itself (see `.auth-panel` below). It used
+     * to be a fixed teal, which meant the login screen and the app disagreed
+     * about which theme the shop had chosen.
      * ================================================================ */
-    --auth-panel-bg: #0d3d3a;
-    --auth-panel-bg-2: #14564f;
-    --auth-panel-ink: #f2fbfa;
-    --auth-panel-ink-2: #c2ded9;
-    --auth-panel-ink-3: #93b8b2;
-    --auth-panel-line: rgba(255, 255, 255, 0.1);
-    --auth-panel-chip: rgba(255, 255, 255, 0.06);
-    --auth-panel-accent: #5fe0d3;
-    --auth-panel-accent-soft: rgba(95, 224, 211, 0.14);
-    --auth-panel-grid: rgba(255, 255, 255, 0.05);
-    --auth-panel-glow: rgba(45, 212, 191, 0.2);
 
     /* ================================================================
      * Legacy aliases.
@@ -1532,11 +1512,29 @@
   /* -----------------------------------------------------------------------
    * The sign-in panel.
    *
-   * A deep navy field with one soft light in the corner. The depth is
-   * structural - a base value, a diagonal lift and a single glow - so the
-   * panel reads as a lit surface rather than as a block of colour.
+   * The brand half of the split follows the chosen pack. The rail is the
+   * closest existing surface: a full-height coloured pane with its own ink,
+   * hairline, chip and active fill, so deriving the panel from those tokens
+   * keeps the login screen and the signed-in application in one family.
+   *
+   * Everything is a mix rather than a hard-coded value, which is what lets a
+   * near-black pack, a warm sandstone pack and the one light rail all produce
+   * readable ink without a per-theme block. The accent is pulled towards the
+   * panel's own text so it still reads on both a deep and a pale rail.
    * --------------------------------------------------------------------- */
   .auth-panel {
+    --auth-panel-bg: var(--sidebar-bg);
+    --auth-panel-bg-2: color-mix(in srgb, var(--sidebar-bg) 86%, var(--brand));
+    --auth-panel-ink: var(--sidebar-text);
+    --auth-panel-ink-2: var(--sidebar-text-muted);
+    --auth-panel-ink-3: color-mix(in srgb, var(--sidebar-text) 62%, var(--sidebar-bg));
+    --auth-panel-line: var(--sidebar-border);
+    --auth-panel-chip: var(--sidebar-panel);
+    --auth-panel-accent: color-mix(in srgb, var(--brand) 62%, var(--sidebar-text));
+    --auth-panel-accent-soft: color-mix(in srgb, var(--auth-panel-accent) 16%, transparent);
+    --auth-panel-grid: color-mix(in srgb, var(--sidebar-text) 7%, transparent);
+    --auth-panel-glow: color-mix(in srgb, var(--brand) 24%, transparent);
+
     background-color: var(--auth-panel-bg);
     background-image:
       radial-gradient(38rem 26rem at 6% -12%, var(--auth-panel-glow), transparent 62%),

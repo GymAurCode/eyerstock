@@ -726,6 +726,8 @@ export function resetPassword(
   id: number,
   newPassword: string,
   mustChangePassword: boolean,
+  /** Audit action; secret-code recovery records its own reason. */
+  action = "resetPassword",
 ): UserDto {
   const { db } = context;
 
@@ -747,7 +749,7 @@ export function resetPassword(
   recordAudit(
     db,
     context.actor,
-    { module: "users", action: "resetPassword", entityType: "user", entityId: id },
+    { module: "users", action, entityType: "user", entityId: id },
     context.nowIso,
   );
 

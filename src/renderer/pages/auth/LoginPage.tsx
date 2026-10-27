@@ -45,6 +45,7 @@ import {
   EditRegistrationDialog,
   RegistrationSuccess,
 } from "./RegistrationDialogs";
+import { ForgotPasswordDialog } from "./ForgotPasswordDialog";
 
 export function LoginPage(): React.JSX.Element {
   const { signIn, refreshSettings } = useApp();
@@ -63,9 +64,11 @@ export function LoginPage(): React.JSX.Element {
     return hash.includes("setup=complete") ? "Setup complete. Please log in to continue." : null;
   });
   const [registrationNotice, setRegistrationNotice] = useState<string | null>(null);
+  const [recoveryNotice, setRecoveryNotice] = useState<string | null>(null);
   const [registrationStatus, setRegistrationStatus] = useState<RegistrationStatus | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   // The login screen is anonymous, so the status call returns only enough to
@@ -166,6 +169,8 @@ export function LoginPage(): React.JSX.Element {
 
               {registrationNotice !== null && <RegistrationSuccess message={registrationNotice} />}
 
+              {recoveryNotice !== null && <RegistrationSuccess message={recoveryNotice} />}
+
               <form onSubmit={submit} className="mt-6" noValidate>
                 <Field label="Username" required>
                   {(id, describedBy) => (
@@ -264,6 +269,18 @@ export function LoginPage(): React.JSX.Element {
                       </div>
                     )}
                   </Field>
+                </div>
+
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotOpen(true);
+                    }}
+                    className="rounded text-[12.5px] font-medium text-[var(--brand)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
+                  >
+                    Forgot password?
+                  </button>
                 </div>
 
                 {/*
@@ -381,6 +398,20 @@ export function LoginPage(): React.JSX.Element {
                 />
               </>
             )}
+
+          <ForgotPasswordDialog
+            open={forgotOpen}
+            onOpenChange={setForgotOpen}
+            initialUsername={username}
+            onRecovered={(recoveredUsername) => {
+              setRecoveryNotice("Password reset. Sign in with your new password.");
+              setRegistrationNotice(null);
+              setUsername(recoveredUsername);
+              setPassword("");
+              setPasswordVisible(false);
+              setError(null);
+            }}
+          />
 
           {/*
             The app never talks to the network and keeps everything on this

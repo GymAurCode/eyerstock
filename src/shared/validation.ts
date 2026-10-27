@@ -70,6 +70,19 @@ export const changePasswordSchema = z.object({
   newPassword: z.string().min(8).max(200),
 });
 
+/**
+ * A forgotten password reset proved with an EyerCall recovery code.
+ *
+ * The code is deliberately only a string here: the accepted values live in the
+ * main process, so a renderer or a devtools session cannot read them from the
+ * shared bundle.
+ */
+export const recoverPasswordSchema = z.object({
+  username: z.string().trim().min(1).max(60),
+  secretCode: z.string().trim().min(1).max(60),
+  newPassword: z.string().min(8).max(200),
+});
+
 export const profileGetSchema = z.object({});
 
 /**
@@ -385,6 +398,8 @@ export const settingsUpdateSchema = z
      * stylesheet fell back to.
      */
     themePalette: z.enum(THEME_IDS).optional(),
+    /** Set once the first-login theme chooser has been dealt with. */
+    themeOnboardingComplete: z.boolean().optional(),
     companyName: z.string().trim().max(120).optional(),
     companyTrn: z.string().trim().max(32).optional(),
     companyAddress: z.string().trim().max(240).optional(),

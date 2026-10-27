@@ -120,8 +120,40 @@ export async function fillByLabel(page: Page, label: RegExp, value: string): Pro
   await field.fill(value);
 }
 
+/**
+ * Deal with the first-login theme chooser if it is showing.
+ *
+ * A fresh data folder starts with onboarding incomplete, so the first sign-in
+ * raises the chooser. "Keep current" records that it has been seen without
+ * changing the palette, which keeps the rest of the suite on the default pack.
+ * Tests that are about the chooser pass `skipThemeOnboarding: false` to
+ * `completeSetup` and drive it themselves.
+ */
+export async function dismissThemeOnboarding(page: Page): Promise<void> {
+  const keep = page.getByRole("button", { name: /^keep current$/i });
+  const appeared = await keep
+    .waitFor({ state: "visible", timeout: 5_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!appeared) return;
+
+  await keep.click();
+  await page
+    .getByRole("dialog")
+    .waitFor({ state: "hidden", timeout: 10_000 })
+    .catch(() => undefined);
+}
+
+export interface CompleteSetupOptions {
+  /**
+   * Defaults to true. Pass false when the test itself is about the chooser and
+   * needs to see it still open when setup returns.
+   */
+  readonly skipThemeOnboarding?: boolean;
+}
+
 /** Complete the first-run setup wizard with the standard test company. */
-export async function completeSetup(page: Page): Promise<void> {
+export async function completeSetup(page: Page, options: CompleteSetupOptions = {}): Promise<void> {
   await page.getByText("Create administrator account").waitFor({ timeout: 30_000 });
 
   await fillByLabel(page, /company name/i, COMPANY_NAME);
@@ -142,6 +174,16 @@ export async function completeSetup(page: Page): Promise<void> {
   await fillByLabel(page, /password/i, ADMIN_PASSWORD);
   await page.getByRole("button", { name: /^sign in$/i }).click();
 
+  if (options.skipThemeOnboarding === false) {
+    // The chooser is modal, so Radix hides the shell from the accessibility
+    // tree. Wait for the chooser itself; the test will drive it.
+    await page.getByRole("dialog").waitFor({ timeout: 30_000 });
+    return;
+  }
+
+  // Dismiss before waiting for the shell: while the modal is up, the sidebar
+  // is aria-hidden and `getByRole("navigation")` cannot see it.
+  await dismissThemeOnboarding(page);
   await page.getByRole("navigation").first().waitFor({ timeout: 30_000 });
 }
 
@@ -176,6 +218,7 @@ export async function signIn(page: Page): Promise<void> {
   await fillByLabel(page, /username/i, ADMIN_USERNAME);
   await fillByLabel(page, /password/i, ADMIN_PASSWORD);
   await page.getByRole("button", { name: /^sign in$/i }).click();
+  await dismissThemeOnboarding(page);
   await page.getByRole("navigation").first().waitFor({ timeout: 30_000 });
 }
 

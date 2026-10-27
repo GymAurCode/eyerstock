@@ -42,6 +42,7 @@ const outDir = resolve(process.argv[2] ?? join(process.cwd(), "print-preview-out
 const settings: AppSettingsSnapshot = {
   theme: "light",
   themePalette: "ocean-teal",
+  themeOnboardingComplete: true,
   companyName: "Bluewave Water Solutions",
   companyTrn: "100428836500003",
   companyAddress: "Shop 12, Al Nakheel Street\nAl Quoz First\nDubai, United Arab Emirates",

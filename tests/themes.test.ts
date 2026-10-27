@@ -130,6 +130,21 @@ describe("theme palette persistence", () => {
     expect(settingsUpdateSchema.safeParse({ themePalette: "not-a-theme" }).success).toBe(false);
     expect(settingsUpdateSchema.safeParse({ unknownField: true }).success).toBe(false);
   });
+
+  it("records whether the first-login chooser has been handled", () => {
+    const db = migratedDb();
+
+    expect(DEFAULT_SNAPSHOT.themeOnboardingComplete).toBe(false);
+    expect(loadSnapshot(db, FILE_SETTINGS).themeOnboardingComplete).toBe(false);
+    expect(isWritableField("themeOnboardingComplete")).toBe(true);
+    expect(settingKeyFor("themeOnboardingComplete")).toBe(SETTING_KEYS.themeOnboardingComplete);
+
+    writeSetting(db, SETTING_KEYS.themeOnboardingComplete, "1");
+
+    expect(loadSnapshot(db, FILE_SETTINGS).themeOnboardingComplete).toBe(true);
+    expect(settingsUpdateSchema.safeParse({ themeOnboardingComplete: true }).success).toBe(true);
+    expect(settingsUpdateSchema.safeParse({ themeOnboardingComplete: "yes" }).success).toBe(false);
+  });
 });
 
 describe("stylesheet coverage", () => {
@@ -169,6 +184,15 @@ describe("stylesheet coverage", () => {
 
   it("lets an isolated preview resolve a pack that is not on <html>", () => {
     expect(styles).toContain("[data-preview-surface]");
+  });
+
+  it("derives the sign-in panel from the active palette", () => {
+    // The login screen used to be fixed teal while the app followed the
+    // chosen pack. These are the links that keep the two together.
+    expect(styles).toMatch(/\.auth-panel\s*\{[^}]*--auth-panel-bg:\s*var\(--sidebar-bg\)/s);
+    expect(styles).toMatch(/--auth-panel-ink:\s*var\(--sidebar-text\)/);
+    expect(styles).toMatch(/--auth-panel-accent:\s*color-mix\(in srgb, var\(--brand\)/);
+    expect(styles).not.toContain("--auth-panel-bg: #0d3d3a");
   });
 });
 

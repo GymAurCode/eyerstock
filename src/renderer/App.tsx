@@ -23,6 +23,7 @@ import { AppProvider, useApp } from "./lib/app-context";
 import { UpdateProvider } from "./lib/updates";
 import { AppShell } from "./components/layout/AppShell";
 import { UpdateNotifier } from "./components/updates/UpdateNotifier";
+import { ThemeOnboarding } from "./components/theme/ThemeOnboarding";
 import { Button } from "./components/ui/Button";
 import { Spinner, TooltipProvider } from "./components/ui/Feedback";
 import { bridge } from "./lib/api";
@@ -234,7 +235,9 @@ function AppRoutes(): React.JSX.Element {
   // If setup is complete but user is null, show login (not setup)
   // This is the normal path after setup completion
 
-  return (
+  // The route table is a variable so the chooser can sit beside it without
+  // reindenting every route.
+  const routes = (
     <Routes>
       <Route element={<AppShell />}>
         <Route index element={<DashboardPage />} />
@@ -405,6 +408,19 @@ function AppRoutes(): React.JSX.Element {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
+  );
+
+  return (
+    <>
+      {routes}
+
+      {/*
+        First-login theme chooser. It is mounted beside the routes rather than
+        inside the dashboard so it appears wherever the first sign-in lands,
+        while the guard chain above still decides when it may render.
+      */}
+      <ThemeOnboarding />
+    </>
   );
 }
 

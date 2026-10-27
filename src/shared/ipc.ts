@@ -199,6 +199,18 @@ export interface RpcMethods {
     request: { readonly currentPassword: string; readonly newPassword: string };
     response: { readonly ok: true };
   };
+
+  /**
+   * Anonymous recovery for a forgotten password.
+   *
+   * There is no session yet; the main process checks the EyerCall recovery code
+   * and then applies the normal password policy. Recovery codes never cross the
+   * bridge in either direction.
+   */
+  "auth.recoverPassword": {
+    request: T.RecoverPasswordRequest;
+    response: { readonly ok: true };
+  };
   "auth.saveDevSession": { request: Record<string, never>; response: { readonly ok: true } };
   "auth.loadDevSession": { request: Record<string, never>; response: T.SessionUser | null };
   "auth.clearDevSession": { request: Record<string, never>; response: { readonly ok: true } };
@@ -629,6 +641,15 @@ export interface AppSettingsSnapshot {
    * having to enumerate thirty combinations.
    */
   readonly themePalette: ThemeId;
+  /**
+   * Whether the first-login theme chooser has been completed.
+   *
+   * The flag is installation-wide because the palette itself is: there is one
+   * theme stored for the whole database, not one per account. A fresh install
+   * starts at `false` and the chooser marks it `true` once the user picks a
+   * theme or chooses to keep the current one.
+   */
+  readonly themeOnboardingComplete: boolean;
   readonly companyName: string;
   readonly companyTrn: string;
   readonly companyAddress: string;

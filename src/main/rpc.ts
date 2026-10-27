@@ -27,6 +27,7 @@ import type {
   SetupRequest,
   SaveUserRequest,
   UpdateProfileRequest,
+  RecoverPasswordRequest,
   RegistrationAuthorisation,
   RegistrationCreateAccountRequest,
   RegistrationUpdateRequest,
@@ -83,6 +84,7 @@ import {
   RegistrationError,
   requireLicensedDevice,
 } from "./registration";
+import { recoverPassword } from "./password-recovery";
 
 export interface RpcDeps {
   readonly db: SqliteDatabase;
@@ -186,6 +188,7 @@ function toApiError(error: unknown): ApiResult<never> {
     // masked so an internal message never reaches the user.
     const known =
       error.name === "AuthError" ||
+      error.name === "PasswordRecoveryError" ||
       error.name === "RegistrationError" ||
       error.name === "PartyError" ||
       error.name === "ProductError" ||
@@ -350,6 +353,22 @@ export function createRpcMethods(): Record<string, MethodDefinition> {
           ctx.nowIso,
         );
         deps.session.reloadPermissions(user.id);
+        return { ok: true as const };
+      },
+    },
+
+    /*
+     * Forgot-password recovery from the login screen.
+     *
+     * Anonymous because there is no session yet. The EyerCall codes are checked
+     * in the main process; the renderer only sends the code the customer typed
+     * and never receives the accepted values back.
+     */
+    "auth.recoverPassword": {
+      schema: schemas.recoverPasswordSchema,
+      anonymous: true,
+      handler: (payload, deps, ctx) => {
+        recoverPassword({ db: deps.db, nowIso: ctx.nowIso }, payload as RecoverPasswordRequest);
         return { ok: true as const };
       },
     },

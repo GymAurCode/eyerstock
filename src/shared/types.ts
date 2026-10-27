@@ -622,6 +622,18 @@ export interface LoginRequest {
   readonly password: string;
 }
 
+/**
+ * A forgotten-password reset proved with a recovery code issued by EyerCall.
+ *
+ * The codes are checked in the main process and are never part of this shape,
+ * so the renderer cannot learn them from an RPC response.
+ */
+export interface RecoverPasswordRequest {
+  readonly username: string;
+  readonly secretCode: string;
+  readonly newPassword: string;
+}
+
 export interface LoginResponse {
   readonly user: SessionUser;
   readonly isSetupComplete: boolean;

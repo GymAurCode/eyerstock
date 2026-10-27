@@ -14,6 +14,7 @@ import { DEFAULT_THEME_ID, normaliseThemeId, type ThemeId } from "../shared/them
 export const SETTING_KEYS = {
   theme: "theme",
   themePalette: "theme_palette",
+  themeOnboardingComplete: "theme_onboarding_complete",
   companyName: "company_name",
   companyTrn: "company_trn",
   companyAddress: "company_address",
@@ -34,6 +35,8 @@ export const SETTING_KEYS = {
 export const DEFAULT_SNAPSHOT: AppSettingsSnapshot = {
   theme: "light",
   themePalette: DEFAULT_THEME_ID,
+  // A new install has not seen the first-login chooser yet.
+  themeOnboardingComplete: false,
   companyName: "",
   companyTrn: "",
   companyAddress: "",
@@ -117,6 +120,7 @@ export function loadSnapshot(
   return {
     theme: asThemePreference(raw.get(SETTING_KEYS.theme)),
     themePalette: asThemePalette(raw.get(SETTING_KEYS.themePalette)),
+    themeOnboardingComplete: raw.get(SETTING_KEYS.themeOnboardingComplete) === "1",
     companyName: asString(raw.get(SETTING_KEYS.companyName), DEFAULT_SNAPSHOT.companyName),
     companyTrn: asString(raw.get(SETTING_KEYS.companyTrn), DEFAULT_SNAPSHOT.companyTrn),
     companyAddress: asString(raw.get(SETTING_KEYS.companyAddress), DEFAULT_SNAPSHOT.companyAddress),
@@ -164,6 +168,7 @@ export function loadSnapshot(
 const WRITABLE: readonly (keyof AppSettingsSnapshot)[] = [
   "theme",
   "themePalette",
+  "themeOnboardingComplete",
   "companyName",
   "companyTrn",
   "companyAddress",
@@ -185,6 +190,8 @@ export function settingKeyFor(field: keyof AppSettingsSnapshot): string | null {
       return SETTING_KEYS.theme;
     case "themePalette":
       return SETTING_KEYS.themePalette;
+    case "themeOnboardingComplete":
+      return SETTING_KEYS.themeOnboardingComplete;
     case "companyName":
       return SETTING_KEYS.companyName;
     case "companyTrn":

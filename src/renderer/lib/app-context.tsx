@@ -258,6 +258,9 @@ export function AppProvider({ children }: AppProviderProps): React.JSX.Element {
 const FALLBACK_SETTINGS: AppSettingsSnapshot = {
   theme: "system",
   themePalette: DEFAULT_THEME_ID,
+  // The fallback is only used before settings load; it must not hide the
+  // chooser from a real first login.
+  themeOnboardingComplete: false,
   companyName: "EyerStock",
   companyTrn: "",
   companyAddress: "",
