@@ -27,6 +27,9 @@ import type {
   SetupRequest,
   SaveUserRequest,
   UpdateProfileRequest,
+  RegistrationAuthorisation,
+  RegistrationCreateAccountRequest,
+  RegistrationUpdateRequest,
 } from "../shared/types";
 import type {
   ExportDataset,
@@ -37,7 +40,12 @@ import type {
 import type { PaymentMethod } from "../shared/types";
 import * as schemas from "../shared/validation";
 import { BrowserWindow, dialog } from "electron";
-import { NotAuthenticatedError, PermissionError, type SessionStore, loadSessionUser } from "./session";
+import {
+  NotAuthenticatedError,
+  PermissionError,
+  type SessionStore,
+  loadSessionUser,
+} from "./session";
 import type { AuditActor } from "./audit-writer";
 import { SYSTEM_ACTOR, recordAudit } from "./audit-writer";
 import { AvatarError, deleteAvatar, storeAvatar } from "./avatars";
@@ -69,6 +77,12 @@ import {
   saveLicense,
   verifyLicenseKey,
 } from "./license";
+import {
+  getRegistrationStatus,
+  readRegistrationDetails,
+  RegistrationError,
+  requireLicensedDevice,
+} from "./registration";
 
 export interface RpcDeps {
   readonly db: SqliteDatabase;
@@ -172,6 +186,7 @@ function toApiError(error: unknown): ApiResult<never> {
     // masked so an internal message never reaches the user.
     const known =
       error.name === "AuthError" ||
+      error.name === "RegistrationError" ||
       error.name === "PartyError" ||
       error.name === "ProductError" ||
       error.name === "DocumentError" ||
@@ -336,6 +351,162 @@ export function createRpcMethods(): Record<string, MethodDefinition> {
         );
         deps.session.reloadPermissions(user.id);
         return { ok: true as const };
+      },
+    },
+
+    /* ------------------------------------------------------- registration -- */
+
+    /*
+     * Login-screen registration management.
+     *
+     * There is no session yet, so these are anonymous at the IPC layer. Each
+     * one that reveals contact details or changes anything proves an existing
+     * administrator password, then re-checks the machine-bound licence. A
+     * renderer cannot name a user id, a machine id or a licence key here.
+     */
+    "registration.status": {
+      schema: schemas.registrationStatusSchema,
+      anonymous: true,
+      handler: (_payload, deps) => getRegistrationStatus(deps.db),
+    },
+
+    "registration.details": {
+      schema: schemas.registrationDetailsSchema,
+      anonymous: true,
+      handler: async (payload, deps) => {
+        const request = payload as RegistrationAuthorisation;
+        const license = await requireLicensedDevice();
+        const owner = auth.primaryAdministrator(deps.db);
+
+        if (owner === null) {
+          throw new RegistrationError(
+            "No administrator account is registered on this installation.",
+          );
+        }
+
+        const administrator = auth.verifyAdministratorCredentials(
+          deps.db,
+          request.username,
+          request.password,
+          deps.now(),
+        );
+        if (administrator.id !== owner.id) {
+          throw new RegistrationError(
+            "Sign in with the registration owner's administrator account to edit these details.",
+            "username",
+          );
+        }
+
+        return readRegistrationDetails(owner, deps.loadSettings(), license);
+      },
+    },
+
+    "registration.update": {
+      schema: schemas.registrationUpdateSchema,
+      anonymous: true,
+      handler: async (payload, deps, ctx) => {
+        const request = payload as RegistrationUpdateRequest;
+        const license = await requireLicensedDevice();
+
+        if (!auth.isSetupComplete(deps.db)) {
+          throw new RegistrationError("Registration has not been set up on this installation yet.");
+        }
+
+        const owner = auth.primaryAdministrator(deps.db);
+        if (owner === null) {
+          throw new RegistrationError(
+            "No administrator account is registered on this installation.",
+          );
+        }
+
+        const administrator = auth.verifyAdministratorCredentials(
+          deps.db,
+          request.username,
+          request.password,
+          deps.now(),
+        );
+        if (administrator.id !== owner.id) {
+          throw new RegistrationError(
+            "Sign in with the registration owner's administrator account to edit these details.",
+            "username",
+          );
+        }
+
+        const actor: AuditActor = { id: owner.id, name: owner.displayName };
+
+        try {
+          // One transaction: company fields and the owner's own row either both
+          // change or neither does. Business tables are never touched.
+          deps.db.transaction(() => {
+            deps.updateSettings({
+              companyName: request.companyName,
+              companyTrn: request.companyTrn,
+              companyAddress: request.companyAddress,
+              companyPhone: request.companyPhone,
+              companyEmail: request.companyEmail,
+            });
+
+            auth.updateOwnProfile({ db: deps.db, actor, nowIso: ctx.nowIso }, owner.id, {
+              displayName: request.ownerName,
+              email: request.ownerEmail,
+              phone: request.ownerPhone,
+            });
+
+            recordAudit(
+              deps.db,
+              actor,
+              {
+                module: "settings",
+                action: "updateRegistration",
+                entityType: "registration",
+                entityId: owner.id,
+                newValues: {
+                  companyName: request.companyName,
+                  companyTrn: request.companyTrn,
+                  companyAddress: request.companyAddress,
+                  companyPhone: request.companyPhone,
+                  companyEmail: request.companyEmail,
+                },
+              },
+              ctx.nowIso,
+            );
+          })();
+        } finally {
+          // The settings service caches its snapshot and updated it inside the
+          // transaction. If the transaction rolled back, the cache would keep
+          // the uncommitted values; re-read either way.
+          deps.refreshSettings();
+        }
+
+        const updatedOwner = auth.primaryAdministrator(deps.db) ?? owner;
+        return readRegistrationDetails(updatedOwner, deps.loadSettings(), license);
+      },
+    },
+
+    "registration.createAccount": {
+      schema: schemas.registrationCreateAccountSchema,
+      anonymous: true,
+      handler: async (payload, deps, ctx) => {
+        const request = payload as RegistrationCreateAccountRequest;
+        await requireLicensedDevice();
+
+        if (!auth.isSetupComplete(deps.db)) {
+          throw new RegistrationError("Registration has not been set up on this installation yet.");
+        }
+
+        const administrator = auth.verifyAdministratorCredentials(
+          deps.db,
+          request.authorizedUsername,
+          request.authorizedPassword,
+          deps.now(),
+        );
+
+        const actor: AuditActor = { id: administrator.id, name: administrator.displayName };
+
+        // The new account shares this installation's existing database and
+        // licence. Only a user row is added; no business data is copied,
+        // detached or deleted, and the authorising account stays active.
+        return auth.createRegistrationAccount({ db: deps.db, actor, nowIso: ctx.nowIso }, request);
       },
     },
 
@@ -1111,7 +1282,9 @@ export function createRpcMethods(): Record<string, MethodDefinition> {
       schema: schemas.financeChartSchema,
       permission: { module: "finance", action: "export" },
       handler: (_payload, deps) => ({
-        path: finance.exportFinanceReport(deps.db, deps.exportDir(), { dataset: "chartOfAccounts" }),
+        path: finance.exportFinanceReport(deps.db, deps.exportDir(), {
+          dataset: "chartOfAccounts",
+        }),
       }),
     },
 
@@ -1458,7 +1631,13 @@ export function createRpcMethods(): Record<string, MethodDefinition> {
       permission: { module: "finance", action: "edit" },
       handler: (payload, deps, ctx) => {
         const request = payload as { confirm: boolean };
-        return finance.backfillHistory(deps.db, request.confirm, ctx.nowIso, ctx.nowDate, ctx.actor.name);
+        return finance.backfillHistory(
+          deps.db,
+          request.confirm,
+          ctx.nowIso,
+          ctx.nowDate,
+          ctx.actor.name,
+        );
       },
     },
 
@@ -1487,10 +1666,7 @@ export function createRpcMethods(): Record<string, MethodDefinition> {
       schema: schemas.partnerTransactionsSchema,
       permission: { module: "partners", action: "view" },
       handler: (payload, deps) =>
-        partners.listPartnerTransactions(
-          deps.db,
-          (payload as { limit?: number }).limit ?? 200,
-        ),
+        partners.listPartnerTransactions(deps.db, (payload as { limit?: number }).limit ?? 200),
     },
 
     /* ----------------------------------------------------- administration -- */

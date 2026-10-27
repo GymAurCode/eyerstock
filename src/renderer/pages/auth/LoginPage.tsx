@@ -15,7 +15,7 @@
  * and nothing about that is re-implemented here.
  */
 
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import {
   AlertCircle,
@@ -25,21 +25,29 @@ import {
   Info,
   Lock,
   LogIn,
+  Pencil,
   ShieldCheck,
   User,
+  UserPlus,
 } from "lucide-react";
 import type { SetupInput } from "../../lib/app-context";
+import type { RegistrationStatus } from "../../../shared/types";
 import { useApp } from "../../lib/app-context";
-import { errorMessage } from "../../lib/api";
+import { call, errorMessage } from "../../lib/api";
 import { MONTH_OPTIONS } from "../../lib/select-options";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Field, Input, Select } from "../../components/ui/Input";
 import { BrandMark } from "../../components/layout/Sidebar";
 import { BrandPanel } from "./BrandPanel";
+import {
+  CreateRegistrationAccountDialog,
+  EditRegistrationDialog,
+  RegistrationSuccess,
+} from "./RegistrationDialogs";
 
 export function LoginPage(): React.JSX.Element {
-  const { signIn } = useApp();
+  const { signIn, refreshSettings } = useApp();
 
   const [username, setUsername] = useState(() => {
     // Prefill username from URL hash (set by setup completion)
@@ -54,7 +62,31 @@ export function LoginPage(): React.JSX.Element {
     const hash = window.location.hash;
     return hash.includes("setup=complete") ? "Setup complete. Please log in to continue." : null;
   });
+  const [registrationNotice, setRegistrationNotice] = useState<string | null>(null);
+  const [registrationStatus, setRegistrationStatus] = useState<RegistrationStatus | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // The login screen is anonymous, so the status call returns only enough to
+  // decide whether these options make sense. A failure hides them rather than
+  // turning a missing convenience into an error on the sign-in screen.
+  useEffect(() => {
+    let cancelled = false;
+    void call("registration.status", {})
+      .then((status) => {
+        if (!cancelled) setRegistrationStatus(status);
+      })
+      .catch(() => {
+        if (!cancelled) setRegistrationStatus(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const canManageRegistration =
+    registrationStatus?.setupComplete === true && registrationStatus.administratorUsername !== null;
 
   /**
    * A second click while the first request is still in flight.
@@ -131,6 +163,8 @@ export function LoginPage(): React.JSX.Element {
                   <span>{successMessage}</span>
                 </div>
               )}
+
+              {registrationNotice !== null && <RegistrationSuccess message={registrationNotice} />}
 
               <form onSubmit={submit} className="mt-6" noValidate>
                 <Field label="Username" required>
@@ -268,8 +302,85 @@ export function LoginPage(): React.JSX.Element {
                   Sign in
                 </Button>
               </form>
+
+              {canManageRegistration && (
+                <section
+                  aria-labelledby="registration-options-heading"
+                  className="mt-6 border-t border-[var(--border)] pt-5"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h2
+                        id="registration-options-heading"
+                        className="text-[12px] font-semibold uppercase tracking-wide text-[var(--text-3)]"
+                      >
+                        Registration
+                      </h2>
+                      <p className="mt-1 text-[12px] leading-relaxed text-[var(--text-3)]">
+                        Manage this computer's registration details or add a local account.
+                      </p>
+                    </div>
+                    <ShieldCheck
+                      className="mt-0.5 h-4 w-4 shrink-0 text-[var(--text-3)]"
+                      aria-hidden="true"
+                    />
+                  </div>
+
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setEditOpen(true);
+                      }}
+                      iconLeft={<Pencil className="h-3.5 w-3.5" />}
+                      className="justify-start"
+                    >
+                      Edit registration details
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setCreateOpen(true);
+                      }}
+                      iconLeft={<UserPlus className="h-3.5 w-3.5" />}
+                      className="justify-start"
+                    >
+                      Create new account
+                    </Button>
+                  </div>
+                </section>
+              )}
             </div>
           </Card>
+
+          {canManageRegistration &&
+            registrationStatus !== null &&
+            registrationStatus.administratorUsername !== null && (
+              <>
+                <EditRegistrationDialog
+                  open={editOpen}
+                  onOpenChange={setEditOpen}
+                  username={registrationStatus.administratorUsername}
+                  onSaved={async (message) => {
+                    setRegistrationNotice(message);
+                    await refreshSettings();
+                  }}
+                />
+                <CreateRegistrationAccountDialog
+                  open={createOpen}
+                  onOpenChange={setCreateOpen}
+                  administratorUsername={registrationStatus.administratorUsername}
+                  onCreated={(message, createdUsername) => {
+                    setRegistrationNotice(message);
+                    setUsername(createdUsername);
+                    setPassword("");
+                    setError(null);
+                  }}
+                />
+              </>
+            )}
 
           {/*
             The app never talks to the network and keeps everything on this

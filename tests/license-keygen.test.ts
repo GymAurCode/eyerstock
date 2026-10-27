@@ -204,7 +204,7 @@ describe("a key that was edited", () => {
     // base64url characters whose final one carries only padding bits, and Node
     // ignores those on decode. Editing it changes nothing, which is correct
     // and not what this test is about.
-    const flipped = `${signatureSegment.endsWith("A") ? "B" : "A"}${signatureSegment.slice(1)}`;
+    const flipped = `${signatureSegment.startsWith("A") ? "B" : "A"}${signatureSegment.slice(1)}`;
 
     const result = await verifyLicenseKey(`${payloadSegment}.${flipped}`);
 

@@ -94,8 +94,7 @@ export interface UpdateStatus {
 }
 
 export type ApiResult<T> =
-  | { readonly ok: true; readonly data: T }
-  | { readonly ok: false; readonly error: ApiError };
+  { readonly ok: true; readonly data: T } | { readonly ok: false; readonly error: ApiError };
 
 /** Channel names. Kept in one place so main and preload cannot drift apart. */
 export const IPC = {
@@ -183,7 +182,6 @@ export interface RpcRequest {
 
 import type * as T from "./types";
 
-
 /**
  * Method map: method name -> request/response types.
  *
@@ -204,6 +202,28 @@ export interface RpcMethods {
   "auth.saveDevSession": { request: Record<string, never>; response: { readonly ok: true } };
   "auth.loadDevSession": { request: Record<string, never>; response: T.SessionUser | null };
   "auth.clearDevSession": { request: Record<string, never>; response: { readonly ok: true } };
+
+  /*
+   * Registration management from the login screen.
+   *
+   * These are anonymous in the IPC sense because there is no session yet; each
+   * one that reads or writes registration details verifies an existing
+   * administrator password in the main process and re-checks the licence and
+   * device binding. No method accepts or returns a machine id.
+   */
+  "registration.status": { request: Record<string, never>; response: T.RegistrationStatus };
+  "registration.details": {
+    request: T.RegistrationAuthorisation;
+    response: T.RegistrationDetails;
+  };
+  "registration.update": {
+    request: T.RegistrationUpdateRequest;
+    response: T.RegistrationDetails;
+  };
+  "registration.createAccount": {
+    request: T.RegistrationCreateAccountRequest;
+    response: T.UserDto;
+  };
 
   /* own profile - always the signed-in user, never an id from the renderer */
   "profile.get": { request: Record<string, never>; response: T.ProfileDto };
@@ -333,7 +353,10 @@ export interface RpcMethods {
     request: T.SaveDocumentRequest & { readonly discountFils?: number | undefined };
     response: T.DocumentDto;
   };
-  "documents.cancel": { request: { readonly id: number; readonly reason: string }; response: T.DocumentDto };
+  "documents.cancel": {
+    request: { readonly id: number; readonly reason: string };
+    response: T.DocumentDto;
+  };
   "documents.delete": { request: { readonly id: number }; response: { readonly ok: true } };
   "documents.numberPreview": {
     request: { readonly kind: "invoice" | "purchaseInvoice" };
@@ -353,7 +376,12 @@ export interface RpcMethods {
   /* partners */
   "partners.list": { request: Record<string, never>; response: T.PartnerDto[] };
   "partners.save": {
-    request: { readonly id?: number; readonly name: string; readonly sharePercent: number; readonly isActive?: boolean };
+    request: {
+      readonly id?: number;
+      readonly name: string;
+      readonly sharePercent: number;
+      readonly isActive?: boolean;
+    };
     response: T.PartnerDto;
   };
   "partners.transactions": {
@@ -365,7 +393,11 @@ export interface RpcMethods {
   "users.list": { request: Record<string, never>; response: T.UserDto[] };
   "users.save": { request: T.SaveUserRequest; response: T.UserDto };
   "users.resetPassword": {
-    request: { readonly id: number; readonly newPassword: string; readonly mustChangePassword?: boolean };
+    request: {
+      readonly id: number;
+      readonly newPassword: string;
+      readonly mustChangePassword?: boolean;
+    };
     response: T.UserDto;
   };
 
@@ -422,7 +454,10 @@ export interface RpcMethods {
     request: { readonly id: number; readonly reason: string };
     response: T.JournalEntryDetailDto;
   };
-  "finance.journal.deleteDraft": { request: { readonly id: number }; response: { readonly ok: true } };
+  "finance.journal.deleteDraft": {
+    request: { readonly id: number };
+    response: { readonly ok: true };
+  };
 
   /* reports */
   "finance.trialBalance": {
@@ -500,7 +535,10 @@ export interface RpcMethods {
       readonly amountFils: number;
       readonly reference?: string | null | undefined;
       readonly notes?: string | null | undefined;
-      readonly allocations?: readonly { readonly documentId: number; readonly amountFils: number }[];
+      readonly allocations?: readonly {
+        readonly documentId: number;
+        readonly amountFils: number;
+      }[];
       /** What the money settles when it is not an invoice payment. */
       readonly postingKind?: T.PaymentPostingKind | undefined;
       /** Which cash or bank ledger the money lands in. */
@@ -646,7 +684,10 @@ export interface MinhaApi {
   /** Opens a native picker. Resolves to `null` when the user cancels. */
   pickFile(purpose: FilePickPurpose): Promise<ApiResult<string | null>>;
   pickImage(purpose: FilePickPurpose): Promise<ApiResult<string | null>>;
-  invoke<M extends RpcMethod>(method: M, payload: RpcRequestOf<M>): Promise<ApiResult<RpcResponseOf<M>>>;
+  invoke<M extends RpcMethod>(
+    method: M,
+    payload: RpcRequestOf<M>,
+  ): Promise<ApiResult<RpcResponseOf<M>>>;
   printHtml(html: string, options: PrintOptions): Promise<ApiResult<string>>;
   saveHtmlAsPdf(
     html: string,

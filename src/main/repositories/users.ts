@@ -26,6 +26,7 @@ import {
 } from "../../shared/permissions";
 import type {
   ProfileDto,
+  RegistrationCreateAccountRequest,
   SaveUserRequest,
   SessionUser,
   SetupRequest,
@@ -151,9 +152,229 @@ function recordAttempt(
   success: boolean,
   nowIso: string,
 ): void {
+  db.prepare("INSERT INTO login_attempts (username, success, attempted_at) VALUES (?, ?, ?)").run(
+    username,
+    success ? 1 : 0,
+    nowIso,
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* registration administration                                                */
+/* -------------------------------------------------------------------------- */
+
+/** The account that owns the installation's registration details. */
+export interface AdministratorIdentity {
+  readonly id: number;
+  readonly username: string;
+  readonly displayName: string;
+  readonly email: string | null;
+  readonly phone: string | null;
+}
+
+/**
+ * The first active administrator, which is the account created by setup.
+ *
+ * Registration details are installation-level, not per-user, so the login
+ * screen needs one stable owner to edit. Ordering by id makes that the setup
+ * administrator and keeps the choice stable even after other administrators
+ * are added.
+ */
+export function primaryAdministrator(db: SqliteDatabase): AdministratorIdentity | null {
+  const row = db
+    .prepare(
+      `SELECT u.id, u.username, u.display_name AS displayName, u.email, u.phone
+         FROM users u
+         JOIN roles r ON r.id = u.role_id
+        WHERE r.name = ? AND u.is_active = 1
+        ORDER BY u.id
+        LIMIT 1`,
+    )
+    .get(SYSTEM_ROLES.admin) as AdministratorIdentity | undefined;
+
+  return row ?? null;
+}
+
+/**
+ * Verify an administrator's password without starting a session.
+ *
+ * Used by the login screen's registration actions, which are privileged but
+ * happen before sign-in. It deliberately reuses the same lockout counters as
+ * `login`, so these actions cannot become an unlimited password oracle, and it
+ * does not update `last_login_at`: proving a password to edit details is not
+ * signing in.
+ */
+export function verifyAdministratorCredentials(
+  db: SqliteDatabase,
+  username: string,
+  password: string,
+  now: Date,
+): AdministratorIdentity {
+  const nowIso = now.toISOString();
+
+  const row = db
+    .prepare(
+      `SELECT u.id, u.username, u.display_name AS displayName, u.email, u.phone,
+              u.password_hash, u.password_salt, u.is_active, u.failed_attempts,
+              u.locked_until, r.name AS roleName
+         FROM users u
+         LEFT JOIN roles r ON r.id = u.role_id
+        WHERE u.username = ? COLLATE NOCASE`,
+    )
+    .get(username) as
+    | {
+        id: number;
+        username: string;
+        displayName: string;
+        email: string | null;
+        phone: string | null;
+        password_hash: string;
+        password_salt: string;
+        is_active: number;
+        failed_attempts: number;
+        locked_until: string | null;
+        roleName: string | null;
+      }
+    | undefined;
+
+  if (row === undefined) {
+    recordAttempt(db, username, false, nowIso);
+    // Same work as a real verification, so an unknown name is not faster.
+    hashPassword(password, "0".repeat(32));
+    throw new AuthError("Wrong username or password.");
+  }
+
+  const lock = evaluateLockout(row.failed_attempts, row.locked_until, now);
+  if (lock.locked) {
+    recordAttempt(db, username, false, nowIso);
+    throw new AuthError(lock.message ?? "Account locked.");
+  }
+
+  if (row.is_active !== 1) {
+    recordAttempt(db, username, false, nowIso);
+    throw new AuthError("This account has been deactivated. Ask an administrator to enable it.");
+  }
+
+  const ok = verifyPassword(password, { hash: row.password_hash, salt: row.password_salt });
+
+  if (!ok) {
+    const attempts = row.failed_attempts + 1;
+    const nowLocked = attempts >= DEFAULT_LOCKOUT.threshold;
+
+    db.prepare(
+      `UPDATE users
+          SET failed_attempts = ?, locked_until = ?, updated_at = ?
+        WHERE id = ?`,
+    ).run(attempts, nowLocked ? lockExpiryIso(now) : null, nowIso, row.id);
+
+    recordAttempt(db, username, false, nowIso);
+
+    const nextLock = evaluateLockout(attempts, nowLocked ? lockExpiryIso(now) : null, now);
+    throw new AuthError(nextLock.message ?? "Wrong username or password.");
+  }
+
+  if (row.roleName !== SYSTEM_ROLES.admin) {
+    // The password is right, but this is not an administrator. Do not count a
+    // lockout failure against a correct password.
+    throw new AuthError(
+      "Only an administrator can change registration details or create accounts.",
+    );
+  }
+
   db.prepare(
-    "INSERT INTO login_attempts (username, success, attempted_at) VALUES (?, ?, ?)",
-  ).run(username, success ? 1 : 0, nowIso);
+    "UPDATE users SET failed_attempts = 0, locked_until = NULL, updated_at = ? WHERE id = ?",
+  ).run(nowIso, row.id);
+
+  recordAttempt(db, username, true, nowIso);
+
+  return {
+    id: row.id,
+    username: row.username,
+    displayName: row.displayName,
+    email: row.email,
+    phone: row.phone,
+  };
+}
+
+/**
+ * Create an additional local account for an already-registered installation.
+ *
+ * This is intentionally just a user row. The active licence already covers the
+ * laptop, so no key is issued here; every account signs in through the same
+ * machine-bound licence. Existing accounts and all business rows are left
+ * untouched.
+ */
+export function createRegistrationAccount(
+  context: { db: SqliteDatabase; actor: AuditActor; nowIso: string },
+  request: RegistrationCreateAccountRequest,
+): UserDto {
+  const { db } = context;
+
+  return db.transaction((): UserDto => {
+    const duplicate = db
+      .prepare("SELECT id FROM users WHERE username = ? COLLATE NOCASE")
+      .get(request.username) as { id?: number } | undefined;
+    if (duplicate !== undefined) {
+      throw new AuthError(`Username ${request.username} is already taken.`);
+    }
+
+    const role = db.prepare("SELECT id FROM roles WHERE name = ?").get(request.role) as
+      { id: number } | undefined;
+    if (role === undefined) {
+      throw new AuthError("That account type is not available on this installation.");
+    }
+
+    const policy = checkPasswordPolicy(request.password, DEFAULT_PASSWORD_POLICY);
+    if (!policy.ok) throw new AuthError(policy.reason);
+
+    const stored = hashPassword(request.password);
+    const email = request.email.trim().toLowerCase();
+    const phone = request.phone.trim();
+
+    const info = db
+      .prepare(
+        `INSERT INTO users
+           (username, display_name, password_hash, password_salt, role_id,
+            must_change_password, is_active, failed_attempts, email, phone,
+            created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 0, 1, 0, ?, ?, ?, ?)`,
+      )
+      .run(
+        request.username,
+        request.displayName,
+        stored.hash,
+        stored.salt,
+        role.id,
+        email.length > 0 ? email : null,
+        phone.length > 0 ? phone : null,
+        context.nowIso,
+        context.nowIso,
+      );
+
+    const id = Number(info.lastInsertRowid);
+
+    recordAudit(
+      db,
+      context.actor,
+      {
+        module: "users",
+        action: "create",
+        entityType: "user",
+        entityId: id,
+        newValues: {
+          username: request.username,
+          displayName: request.displayName,
+          role: request.role,
+          email: email.length > 0 ? email : null,
+          phone: phone.length > 0 ? phone : null,
+          password: "[redacted]",
+        },
+      },
+      context.nowIso,
+    );
+
+    return mapUser(db.prepare(`${USER_SELECT} WHERE u.id = ?`).get(id) as UserRow);
+  })();
 }
 
 export function changePassword(
@@ -327,8 +548,7 @@ export function updateOwnProfile(
 /** The stored avatar file name, so a new one can replace the old file. */
 export function currentAvatarName(db: SqliteDatabase, userId: number): string | null {
   const row = db.prepare("SELECT avatar_path AS avatarPath FROM users WHERE id = ?").get(userId) as
-    | { avatarPath: string | null }
-    | undefined;
+    { avatarPath: string | null } | undefined;
   return row?.avatarPath ?? null;
 }
 
@@ -386,14 +606,14 @@ export function saveUser(
 
     if (request.id !== undefined) {
       const before = db.prepare("SELECT * FROM users WHERE id = ?").get(request.id) as
-        | Record<string, unknown>
-        | undefined;
+        Record<string, unknown> | undefined;
       if (before === undefined) throw new AuthError(`User ${String(request.id)} was not found.`);
 
       const duplicate = db
         .prepare("SELECT id FROM users WHERE username = ? COLLATE NOCASE AND id <> ?")
         .get(request.username, request.id) as { id?: number } | undefined;
-      if (duplicate !== undefined) throw new AuthError(`Username ${request.username} is already taken.`);
+      if (duplicate !== undefined)
+        throw new AuthError(`Username ${request.username} is already taken.`);
 
       db.prepare(
         `UPDATE users
@@ -423,7 +643,10 @@ export function saveUser(
           entityType: "user",
           entityId: request.id,
           oldValues: before,
-          newValues: { ...request, password: request.password === undefined ? undefined : "[redacted]" },
+          newValues: {
+            ...request,
+            password: request.password === undefined ? undefined : "[redacted]",
+          },
         },
         context.nowIso,
       );
@@ -488,8 +711,7 @@ function assertValidRole(db: SqliteDatabase, roleId: number | null): void {
   }
 
   const row = db.prepare("SELECT name FROM roles WHERE id = ?").get(roleId) as
-    | { name: string }
-    | undefined;
+    { name: string } | undefined;
 
   if (row === undefined) {
     throw new AuthError("That role no longer exists. Pick Administrator or Staff.");
@@ -511,8 +733,7 @@ export function resetPassword(
   if (!policy.ok) throw new AuthError(policy.reason);
 
   const target = db.prepare("SELECT id FROM users WHERE id = ?").get(id) as
-    | { id: number }
-    | undefined;
+    { id: number } | undefined;
   if (target === undefined) throw new AuthError(`User ${String(id)} was not found.`);
 
   setPassword(db, id, newPassword, context.nowIso);
@@ -533,12 +754,7 @@ export function resetPassword(
   return mapUser(db.prepare(`${USER_SELECT} WHERE u.id = ?`).get(id) as UserRow);
 }
 
-function setPassword(
-  db: SqliteDatabase,
-  userId: number,
-  password: string,
-  nowIso: string,
-): void {
+function setPassword(db: SqliteDatabase, userId: number, password: string, nowIso: string): void {
   const policy = checkPasswordPolicy(password, DEFAULT_PASSWORD_POLICY);
   if (!policy.ok) throw new AuthError(policy.reason);
 
@@ -571,7 +787,9 @@ export function runSetup(
 
   db.transaction(() => {
     if (isSetupComplete(db)) {
-      throw new AuthError("Setup has already been completed. Change settings from the Settings screen.");
+      throw new AuthError(
+        "Setup has already been completed. Change settings from the Settings screen.",
+      );
     }
 
     const policy = checkPasswordPolicy(request.adminPassword, DEFAULT_PASSWORD_POLICY);
@@ -629,8 +847,16 @@ export function ensureDefaultRoles(db: SqliteDatabase, nowIso: string): number {
     "INSERT OR IGNORE INTO roles (name, description, is_system, created_at) VALUES (?, ?, 1, ?)",
   );
 
-  insertRole.run(SYSTEM_ROLES.admin, "Full access, including settings and user management.", nowIso);
-  insertRole.run(SYSTEM_ROLES.staff, "Day-to-day selling and stock. No profit reports, no settings.", nowIso);
+  insertRole.run(
+    SYSTEM_ROLES.admin,
+    "Full access, including settings and user management.",
+    nowIso,
+  );
+  insertRole.run(
+    SYSTEM_ROLES.staff,
+    "Day-to-day selling and stock. No profit reports, no settings.",
+    nowIso,
+  );
 
   const rows = db.prepare("SELECT id, name FROM roles").all() as { id: number; name: string }[];
   const byName = new Map(rows.map((row) => [row.name, row.id]));

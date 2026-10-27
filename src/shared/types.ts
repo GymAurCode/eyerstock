@@ -369,8 +369,16 @@ export interface DashboardDto {
   readonly receivablesFils: number;
   readonly payablesFils: number;
   readonly lowStockCount: number;
-  readonly salesVsExpenses: readonly { readonly month: string; readonly salesFils: number; readonly expenseFils: number }[];
-  readonly topProducts: readonly { readonly name: string; readonly qtyMilli: number; readonly netFils: number }[];
+  readonly salesVsExpenses: readonly {
+    readonly month: string;
+    readonly salesFils: number;
+    readonly expenseFils: number;
+  }[];
+  readonly topProducts: readonly {
+    readonly name: string;
+    readonly qtyMilli: number;
+    readonly netFils: number;
+  }[];
   readonly inventory: DashboardInventoryDto;
   readonly generatedAtIso: string;
 }
@@ -385,7 +393,10 @@ export interface ProfitAndLossDto {
   readonly grossMarginPercent: number;
   readonly operatingExpensesFils: number;
   readonly netProfitFils: number;
-  readonly expensesByCategory: readonly { readonly category: string; readonly amountFils: number }[];
+  readonly expensesByCategory: readonly {
+    readonly category: string;
+    readonly amountFils: number;
+  }[];
 }
 
 /**
@@ -522,6 +533,88 @@ export interface UpdateProfileRequest {
    * is no "unset" spelling: an absent field means "not changing this".
    */
   readonly avatarPath?: string | undefined;
+}
+
+/* -------------------------------------------------------------------------- */
+/* registration                                                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * What the login screen may know about registration before anybody proves who
+ * they are.
+ *
+ * Deliberately tiny: the administrator's login name and display name are
+ * already visible on a single-user shop computer, and nothing else here is
+ * secret. The machine fingerprint and the licence key are never part of this
+ * shape.
+ */
+export interface RegistrationStatus {
+  readonly setupComplete: boolean;
+  readonly administratorUsername: string | null;
+  readonly administratorName: string | null;
+}
+
+/** Local proof that the caller is an administrator: no renderer-held id. */
+export interface RegistrationAuthorisation {
+  readonly username: string;
+  readonly password: string;
+}
+
+/**
+ * The registration details an administrator may edit.
+ *
+ * The password that authorised the read is intentionally absent. It is proof
+ * for the main process, not part of the stored registration.
+ *
+ * `licensedClientName` is read-only on purpose: it is signed inside the
+ * licence payload. Changing it would invalidate the key, so an edit never
+ * touches it and the screen shows why.
+ */
+export interface RegistrationDetails {
+  readonly username: string;
+  readonly companyName: string;
+  readonly companyTrn: string;
+  readonly companyAddress: string;
+  readonly companyPhone: string;
+  readonly companyEmail: string;
+  readonly ownerName: string;
+  readonly ownerEmail: string;
+  readonly ownerPhone: string;
+  readonly licensedClientName: string;
+  readonly edition: string;
+  readonly expiresAt: string | null;
+}
+
+/** Fields written back to the existing registration record. */
+export interface RegistrationUpdateRequest extends RegistrationAuthorisation {
+  readonly companyName: string;
+  readonly companyTrn: string;
+  readonly companyAddress: string;
+  readonly companyPhone: string;
+  readonly companyEmail: string;
+  readonly ownerName: string;
+  readonly ownerEmail: string;
+  readonly ownerPhone: string;
+}
+
+export type RegistrationAccountRole = "Administrator" | "Staff";
+
+/**
+ * A new local account authorised by an existing administrator.
+ *
+ * This creates a user row only. It never issues a licence key and never
+ * replaces the authorising account, because the installation already supports
+ * more than one account over one business database.
+ */
+export interface RegistrationCreateAccountRequest {
+  readonly authorizedUsername: string;
+  readonly authorizedPassword: string;
+  readonly username: string;
+  readonly displayName: string;
+  readonly email: string;
+  readonly phone: string;
+  readonly password: string;
+  readonly role: RegistrationAccountRole;
 }
 
 export interface LoginRequest {

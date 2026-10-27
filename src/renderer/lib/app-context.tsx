@@ -192,6 +192,8 @@ export interface AppState {
   signOut(): Promise<void>;
   refreshSession(): Promise<void>;
   updateSettings(patch: Partial<AppSettingsSnapshot>): Promise<void>;
+  /** Re-read settings written by a main-process flow, such as registration. */
+  refreshSettings(): Promise<void>;
   activateLicense(key: string): Promise<void>;
 }
 
@@ -603,12 +605,14 @@ function AppStateProvider({ children }: { readonly children: ReactNode }): React
       signOut,
       refreshSession,
       updateSettings: persistSettings,
+      refreshSettings: loadSettings,
       activateLicense,
     }),
     [
       bridgeMissing,
       can,
       completeSetup,
+      loadSettings,
       persistSettings,
       ready,
       refreshSession,

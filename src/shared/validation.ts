@@ -17,6 +17,16 @@ const isoDate = z
 
 const nullableText = (max: number) => z.string().max(max).nullable().optional();
 
+/** Empty is allowed; anything else has to look like an address. */
+const optionalEmail = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .refine((value) => value === "" || z.string().email().safeParse(value).success, {
+      message: "Enter a valid email address.",
+    });
+
 const quantityMilli = z
   .number()
   .int("Quantities are stored in thousandths: 1 unit = 1000.")
@@ -102,6 +112,42 @@ export const licenseActivateSchema = z.object({
 });
 
 export const licenseStatusSchema = z.object({});
+
+/* -------------------------------------------------------------------------- */
+/* registration                                                               */
+/* -------------------------------------------------------------------------- */
+
+export const registrationStatusSchema = z.object({});
+
+const registrationAuthorisation = {
+  username: z.string().trim().min(1).max(60),
+  password: z.string().min(1).max(200),
+};
+
+export const registrationDetailsSchema = z.object(registrationAuthorisation);
+
+export const registrationUpdateSchema = z.object({
+  ...registrationAuthorisation,
+  companyName: z.string().trim().min(1).max(120),
+  companyTrn: z.string().trim().max(32).default(""),
+  companyAddress: z.string().trim().max(240).default(""),
+  companyPhone: z.string().trim().max(40).default(""),
+  companyEmail: optionalEmail(160).default(""),
+  ownerName: z.string().trim().min(1).max(120),
+  ownerEmail: optionalEmail(254).default(""),
+  ownerPhone: z.string().trim().max(40).default(""),
+});
+
+export const registrationCreateAccountSchema = z.object({
+  authorizedUsername: z.string().trim().min(1).max(60),
+  authorizedPassword: z.string().min(1).max(200),
+  username: z.string().trim().min(3).max(60),
+  displayName: z.string().trim().min(1).max(120),
+  email: optionalEmail(254).default(""),
+  phone: z.string().trim().max(40).default(""),
+  password: z.string().min(8).max(200),
+  role: z.enum(["Administrator", "Staff"]),
+});
 
 /* -------------------------------------------------------------------------- */
 /* parties                                                                    */
@@ -418,8 +464,6 @@ const accountSubtype = z.enum([
   "operatingExpense",
   "otherExpense",
 ]);
-
-
 
 export const financeOverviewSchema = z.object({
   fromDate: isoDate,
